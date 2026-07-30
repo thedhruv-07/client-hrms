@@ -11,7 +11,7 @@ export const contractWorkersRouter = Router();
 
 contractWorkersRouter.use(requireAuth);
 
-const createSchema = z.object({
+export const createSchema = z.object({
   code: z.string().min(1),
   name: z.string().min(1),
   basicSalary: z.number().positive(),
@@ -22,7 +22,7 @@ const createSchema = z.object({
   uan: z.string().optional(),
 });
 
-const updateSchema = createSchema.partial().extend({
+export const updateSchema = createSchema.partial().extend({
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
 });
 
@@ -40,6 +40,25 @@ function idParam(req: Request): string | undefined {
   return typeof id === "string" ? id : undefined;
 }
 
+/**
+ * @openapi
+ * /contract-workers:
+ *   get:
+ *     tags: [Contract Workers]
+ *     summary: List contract workers
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema: { type: string }
+ *         description: Case-insensitive substring match on name or code
+ *     responses:
+ *       200:
+ *         description: Array of contract workers
+ *         content:
+ *           application/json:
+ *             schema: { type: array, items: { $ref: '#/components/schemas/ContractWorker' } }
+ *       401: { description: Missing or invalid token }
+ */
 contractWorkersRouter.get("/", async (req, res) => {
   const q = queryString(req.query["q"]);
   const workers = await prisma.contractWorker.findMany({
@@ -51,6 +70,19 @@ contractWorkersRouter.get("/", async (req, res) => {
   res.json(workers);
 });
 
+/**
+ * @openapi
+ * /contract-workers/export:
+ *   get:
+ *     tags: [Contract Workers]
+ *     summary: Export all contract workers as CSV
+ *     responses:
+ *       200:
+ *         description: CSV file (code,name,basicSalary,bankAccount,ifsc,pfNo,esicNo,uan,status)
+ *         content:
+ *           text/csv: { schema: { type: string } }
+ *       401: { description: Missing or invalid token }
+ */
 // Registered before "/:id" so "export" isn't captured as an id.
 contractWorkersRouter.get("/export", async (_req, res) => {
   const workers = await prisma.contractWorker.findMany({ orderBy: { code: "asc" } });
@@ -73,6 +105,30 @@ contractWorkersRouter.get("/export", async (_req, res) => {
   res.send(csv);
 });
 
+/**
+ * @openapi
+ * /contract-workers/import:
+ *   post:
+ *     tags: [Contract Workers]
+ *     summary: Bulk-create contract workers from CSV (ADMIN, HR)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [csv]
+ *             properties:
+ *               csv: { type: string, description: "Header row: code,name,basicSalary,bankAccount,ifsc,pfNo,esicNo,uan" }
+ *     responses:
+ *       200:
+ *         description: Per-row results — a row failing validation or a duplicate code doesn't abort the rest of the import
+ *         content:
+ *           application/json: { schema: { $ref: '#/components/schemas/ImportResult' } }
+ *       400: { description: Malformed request body }
+ *       401: { description: Missing or invalid token }
+ *       403: { description: Requires ADMIN or HR }
+ */
 // Registered before "/:id" so "import" isn't captured as an id.
 contractWorkersRouter.post("/import", requireRole("ADMIN", "HR"), async (req, res) => {
   const parsedBody = importSchema.safeParse(req.body);
@@ -115,6 +171,22 @@ contractWorkersRouter.post("/import", requireRole("ADMIN", "HR"), async (req, re
   res.json({ created, total: rows.length, results });
 });
 
+/**
+ * @openapi
+ * /contract-workers/{id}:
+ *   get:
+ *     tags: [Contract Workers]
+ *     summary: Get a contract worker by id
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: The contract worker, content: { application/json: { schema: { $ref: '#/components/schemas/ContractWorker' } } } }
+ *       401: { description: Missing or invalid token }
+ *       404: { description: Not found }
+ */
 contractWorkersRouter.get("/:id", async (req, res) => {
   const worker = await prisma.contractWorker.findUnique({ where: { id: idParam(req) } });
   if (!worker) {
@@ -124,6 +196,35 @@ contractWorkersRouter.get("/:id", async (req, res) => {
   res.json(worker);
 });
 
+/**
+ * @openapi
+ * /contract-workers:
+ *   post:
+ *     tags: [Contract Workers]
+ *     summary: Create a contract worker (ADMIN, HR)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [code, name, basicSalary]
+ *             properties:
+ *               code: { type: string }
+ *               name: { type: string }
+ *               basicSalary: { type: number, exclusiveMinimum: 0 }
+ *               bankAccount: { type: string }
+ *               ifsc: { type: string }
+ *               pfNo: { type: string }
+ *               esicNo: { type: string }
+ *               uan: { type: string }
+ *     responses:
+ *       201: { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ContractWorker' } } } }
+ *       400: { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       401: { description: Missing or invalid token }
+ *       403: { description: Requires ADMIN or HR }
+ *       409: { description: Code already in use }
+ */
 contractWorkersRouter.post("/", requireRole("ADMIN", "HR"), async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -143,6 +244,41 @@ contractWorkersRouter.post("/", requireRole("ADMIN", "HR"), async (req, res) => 
   }
 });
 
+/**
+ * @openapi
+ * /contract-workers/{id}:
+ *   put:
+ *     tags: [Contract Workers]
+ *     summary: Update a contract worker (ADMIN, HR)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: All fields optional — partial update
+ *             properties:
+ *               code: { type: string }
+ *               name: { type: string }
+ *               basicSalary: { type: number, exclusiveMinimum: 0 }
+ *               bankAccount: { type: string }
+ *               ifsc: { type: string }
+ *               pfNo: { type: string }
+ *               esicNo: { type: string }
+ *               uan: { type: string }
+ *               status: { type: string, enum: [ACTIVE, INACTIVE] }
+ *     responses:
+ *       200: { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/ContractWorker' } } } }
+ *       400: { description: Validation error }
+ *       401: { description: Missing or invalid token }
+ *       403: { description: Requires ADMIN or HR }
+ *       404: { description: Not found }
+ */
 contractWorkersRouter.put("/:id", requireRole("ADMIN", "HR"), async (req, res) => {
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -165,6 +301,24 @@ contractWorkersRouter.put("/:id", requireRole("ADMIN", "HR"), async (req, res) =
   }
 });
 
+/**
+ * @openapi
+ * /contract-workers/{id}:
+ *   delete:
+ *     tags: [Contract Workers]
+ *     summary: Deactivate a contract worker (ADMIN)
+ *     description: Soft delete — sets status to INACTIVE. Historical PayrollLine rows reference this worker, so it's never hard-deleted.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Deactivated, content: { application/json: { schema: { $ref: '#/components/schemas/ContractWorker' } } } }
+ *       401: { description: Missing or invalid token }
+ *       403: { description: Requires ADMIN }
+ *       404: { description: Not found }
+ */
 // Soft delete only: ContractWorker rows are referenced by historical
 // PayrollLine rows, so a hard delete would either fail the FK constraint
 // or silently orphan past payroll runs. Deactivating preserves history.

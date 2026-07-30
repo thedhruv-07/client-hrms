@@ -23,6 +23,23 @@ function idParam(req: Request): string | undefined {
   return queryString(req.params["id"]);
 }
 
+/**
+ * @openapi
+ * /reports/wage-register:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Wage register — per contract payroll run, worker-by-worker
+ *     parameters:
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: month
+ *         schema: { type: integer, minimum: 1, maximum: 12 }
+ *     responses:
+ *       200: { description: One entry per matching payroll run, each with its worker rows and totals }
+ *       401: { description: Missing or invalid token }
+ */
 // 1. Wage Register Report — per contract payroll run, worker-by-worker.
 reportsRouter.get("/wage-register", async (req, res) => {
   const runs = await prisma.payrollRun.findMany({
@@ -56,6 +73,26 @@ reportsRouter.get("/wage-register", async (req, res) => {
   res.json(report);
 });
 
+/**
+ * @openapi
+ * /reports/bill-register:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Bills issued per client per period
+ *     parameters:
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: month
+ *         schema: { type: integer, minimum: 1, maximum: 12 }
+ *     responses:
+ *       200: { description: Bill rows (billNo, date, client, Total1/2, CGST/SGST, Grand Total) plus a grand total across the list }
+ *       401: { description: Missing or invalid token }
+ */
 // 2. Client Bill Register — bills issued per client per period.
 reportsRouter.get("/bill-register", async (req, res) => {
   const clientId = queryString(req.query["clientId"]);
@@ -83,6 +120,23 @@ reportsRouter.get("/bill-register", async (req, res) => {
   res.json({ bills: rows, grandTotal: sumBy(rows, (r) => r.grandTotal ?? 0) });
 });
 
+/**
+ * @openapi
+ * /reports/statutory-contributions:
+ *   get:
+ *     tags: [Reports]
+ *     summary: PF/ESIC/LWF totals, contract vs in-house
+ *     parameters:
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: month
+ *         schema: { type: integer, minimum: 1, maximum: 12 }
+ *     responses:
+ *       200: { description: "{ contract: {pf,esic,lwf,total}, inHouse: {pf,esic,lwf,total} }" }
+ *       401: { description: Missing or invalid token }
+ */
 // 3. Statutory Contribution Summary — PF/ESIC/LWF, contract vs in-house.
 reportsRouter.get("/statutory-contributions", async (req, res) => {
   const runs = await prisma.payrollRun.findMany({
@@ -101,6 +155,22 @@ reportsRouter.get("/statutory-contributions", async (req, res) => {
   res.json({ contract: summarize("CONTRACT"), inHouse: summarize("INHOUSE") });
 });
 
+/**
+ * @openapi
+ * /reports/contract-workers/{id}/history:
+ *   get:
+ *     tags: [Reports]
+ *     summary: One contract worker's net-pay history across every run
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Per-run gross/deduction/advance/net rows plus totals }
+ *       400: { description: Invalid id }
+ *       401: { description: Missing or invalid token }
+ */
 // 4. Contract Worker Payment History.
 reportsRouter.get("/contract-workers/:id/history", async (req, res) => {
   const id = idParam(req);
@@ -134,6 +204,24 @@ reportsRouter.get("/contract-workers/:id/history", async (req, res) => {
   });
 });
 
+/**
+ * @openapi
+ * /reports/advances:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Advances given this period, contract and in-house
+ *     description: No recovery tracking exists yet — this is "advances given," not "still outstanding."
+ *     parameters:
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: month
+ *         schema: { type: integer, minimum: 1, maximum: 12 }
+ *     responses:
+ *       200: { description: Advance rows (month, year, type, worker, amount) plus a total }
+ *       401: { description: Missing or invalid token }
+ */
 // 5. Outstanding Advances — advances given this period, both modules.
 // No recovery tracking exists yet, so this is "given," not "still owed."
 reportsRouter.get("/advances", async (req, res) => {
@@ -155,6 +243,23 @@ reportsRouter.get("/advances", async (req, res) => {
   res.json({ advances: rows, total: sumBy(rows, (r) => r.advance) });
 });
 
+/**
+ * @openapi
+ * /reports/inhouse-payroll-summary:
+ *   get:
+ *     tags: [Reports]
+ *     summary: In-house payroll totals per run
+ *     parameters:
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: month
+ *         schema: { type: integer, minimum: 1, maximum: 12 }
+ *     responses:
+ *       200: { description: One entry per matching run, with employee count and gross/deduction/bonus/incentive/net totals }
+ *       401: { description: Missing or invalid token }
+ */
 // 6. In-House Payroll Summary — per run.
 reportsRouter.get("/inhouse-payroll-summary", async (req, res) => {
   const runs = await prisma.payrollRun.findMany({
@@ -179,6 +284,23 @@ reportsRouter.get("/inhouse-payroll-summary", async (req, res) => {
   res.json(report);
 });
 
+/**
+ * @openapi
+ * /reports/department-cost:
+ *   get:
+ *     tags: [Reports]
+ *     summary: In-house salary cost grouped by department
+ *     parameters:
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: month
+ *         schema: { type: integer, minimum: 1, maximum: 12 }
+ *     responses:
+ *       200: { description: One entry per department with employee count and gross/net totals }
+ *       401: { description: Missing or invalid token }
+ */
 // 7. Department-wise Salary Cost.
 reportsRouter.get("/department-cost", async (req, res) => {
   const lines = await prisma.payrollLine.findMany({
@@ -206,6 +328,22 @@ reportsRouter.get("/department-cost", async (req, res) => {
   res.json(departments);
 });
 
+/**
+ * @openapi
+ * /reports/in-house-employees/{id}/history:
+ *   get:
+ *     tags: [Reports]
+ *     summary: One in-house employee's net-pay history across every run
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Per-run gross/bonus/incentive/deduction/net rows plus totals }
+ *       400: { description: Invalid id }
+ *       401: { description: Missing or invalid token }
+ */
 // 8. In-House Employee Payment History.
 reportsRouter.get("/in-house-employees/:id/history", async (req, res) => {
   const id = idParam(req);
@@ -239,6 +377,23 @@ reportsRouter.get("/in-house-employees/:id/history", async (req, res) => {
   });
 });
 
+/**
+ * @openapi
+ * /reports/gst-summary:
+ *   get:
+ *     tags: [Reports]
+ *     summary: CGST/SGST collected across bills in a period
+ *     parameters:
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: month
+ *         schema: { type: integer, minimum: 1, maximum: 12 }
+ *     responses:
+ *       200: { description: "{ billCount, taxableValue, cgst, sgst, totalGst }" }
+ *       401: { description: Missing or invalid token }
+ */
 // 9. GST Summary — CGST/SGST collected across bills in a period.
 reportsRouter.get("/gst-summary", async (req, res) => {
   const year = queryNumber(req.query["year"]);
@@ -256,9 +411,30 @@ reportsRouter.get("/gst-summary", async (req, res) => {
   res.json({ billCount: bills.length, taxableValue, cgst, sgst, totalGst: cgst + sgst });
 });
 
-// 10. Audit Log Report.
-// No route writes to AuditLog yet — that lands in the import/export/audit
-// phase, so this will return an empty list until then.
+/**
+ * @openapi
+ * /reports/audit-log:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Audit trail — who changed what, when
+ *     parameters:
+ *       - in: query
+ *         name: userId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: entityType
+ *         schema: { type: string }
+ *         description: e.g. ContractWorker, InHouseEmployee, Database
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 100, maximum: 500 }
+ *     responses:
+ *       200: { description: AuditLog rows, newest first, with the acting user's name/email }
+ *       401: { description: Missing or invalid token }
+ */
+// 10. Audit Log Report. Populated by lib/audit.ts's logAudit(), called
+// from every ContractWorker/InHouseEmployee create/update/delete/import
+// and from POST /backup/restore.
 reportsRouter.get("/audit-log", async (req, res) => {
   const userId = queryString(req.query["userId"]);
   const entityType = queryString(req.query["entityType"]);

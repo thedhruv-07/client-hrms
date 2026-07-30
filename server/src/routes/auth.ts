@@ -1,6 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import rateLimit from "express-rate-limit";
 import { prisma } from "../lib/prisma";
 import { requireAuth, signToken } from "../middleware/auth";
 
@@ -11,7 +12,54 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-authRouter.post("/login", async (req, res) => {
+// Brute-force protection: 10 attempts per IP per 15 minutes. Counts every
+// request regardless of outcome, not just failures — simpler, and a
+// legitimate user retrying a few times won't hit this.
+const loginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
+ * @openapi
+ * /auth/login:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Log in and receive a JWT
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password]
+ *             properties:
+ *               email: { type: string, format: email }
+ *               password: { type: string }
+ *     responses:
+ *       200:
+ *         description: Signed JWT (8h expiry) and the user's profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 token: { type: string }
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     email: { type: string }
+ *                     name: { type: string }
+ *                     role: { type: string, enum: [ADMIN, HR, ACCOUNTANT, VIEWER] }
+ *       400: { description: Invalid request body, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       401: { description: Invalid credentials, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+ *       429: { description: Too many login attempts from this IP }
+ */
+authRouter.post("/login", loginRateLimit, async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -32,6 +80,17 @@ authRouter.post("/login", async (req, res) => {
   });
 });
 
+/**
+ * @openapi
+ * /auth/me:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Get the current authenticated user
+ *     responses:
+ *       200:
+ *         description: The decoded JWT claims (id, email, role)
+ *       401: { description: Missing or invalid token }
+ */
 authRouter.get("/me", requireAuth, (req, res) => {
   res.json({ user: req.user });
 });

@@ -32,6 +32,16 @@ test("PF defaults to 0 when not supplied", () => {
   assert.equal(r.pf, 0);
 });
 
+test("zero working days and zero OT hours nets to zero minus any advance", () => {
+  const r = calculateWageLine({ basicSalary: 17000, workingDays: 0, otHours: 0, advance: 500 });
+  assert.equal(r.basicEarn, 0);
+  assert.equal(r.otAmount, 0);
+  assert.equal(r.grossEarning, 0);
+  assert.equal(r.esic, 0);
+  assert.equal(r.lwf, 0);
+  assert.equal(r.netPayable, -500);
+});
+
 test("register totals match the sheet's row-6 column totals", () => {
   const inputs = [
     { basicSalary: 17000, workingDays: 23, otHours: 58, advance: 1000 },

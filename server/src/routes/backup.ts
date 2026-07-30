@@ -21,6 +21,18 @@ const BACKUP_VERSION = 1;
  * database, since PayrollRun.createdById is a required FK to User that
  * this snapshot does not carry.
  */
+/**
+ * @openapi
+ * /backup:
+ *   get:
+ *     tags: [Backup]
+ *     summary: Download a full JSON snapshot (ADMIN)
+ *     description: Covers Company, Client, ContractWorker, InHouseEmployee, PayrollRun, PayrollLine, Bill, BillLine. Excludes User and AuditLog.
+ *     responses:
+ *       200: { description: "{ version, exportedAt, data: {...} }" }
+ *       401: { description: Missing or invalid token }
+ *       403: { description: Requires ADMIN }
+ */
 backupRouter.get("/", requireRole("ADMIN"), async (_req, res) => {
   const [companies, clients, contractWorkers, inHouseEmployees, payrollRuns, payrollLines, bills, billLines] = await Promise.all([
     prisma.company.findMany(),
@@ -60,6 +72,32 @@ const restoreSchema = z.object({
   }),
 });
 
+/**
+ * @openapi
+ * /backup/restore:
+ *   post:
+ *     tags: [Backup]
+ *     summary: Wipe and restore from a snapshot (ADMIN, destructive)
+ *     description: Deletes every row in the tables the snapshot covers and recreates them from `data`, in one transaction. Requires `confirm:true`. Assumes the same User rows already exist (PayrollRun.createdById isn't carried by the snapshot).
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [version, confirm, data]
+ *             properties:
+ *               version: { type: integer, enum: [1] }
+ *               confirm: { type: boolean, enum: [true], description: Must be literal true }
+ *               data:
+ *                 type: object
+ *                 description: Same shape as GET /backup's "data" field
+ *     responses:
+ *       200: { description: "{ restored: true }" }
+ *       400: { description: Missing confirm:true, wrong version, or malformed body }
+ *       401: { description: Missing or invalid token }
+ *       403: { description: Requires ADMIN }
+ */
 backupRouter.post("/restore", requireRole("ADMIN"), async (req, res) => {
   const parsed = restoreSchema.safeParse(req.body);
   if (!parsed.success) {

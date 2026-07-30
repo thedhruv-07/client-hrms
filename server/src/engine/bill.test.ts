@@ -47,3 +47,13 @@ test("lwf2 is based on basicWages alone, not total1", () => {
   // total1 = 1500, but lwf2 = (1000 * 0.2 / 100) * 2 = 4, not based on 1500
   assert.equal(bill.lwf2, 4);
 });
+
+test("all-zero input nets to an all-zero bill", () => {
+  const bill = calculateBill({ basicWages: 0, incentiveAmt: 0 });
+  assert.equal(bill.total1, 0);
+  assert.equal(bill.esiEmployer, 0);
+  assert.equal(bill.serviceCharge, 0);
+  assert.equal(bill.lwf2, 0);
+  assert.equal(bill.total2, 0);
+  assert.equal(bill.grandTotal, 0);
+});

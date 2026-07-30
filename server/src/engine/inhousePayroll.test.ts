@@ -29,6 +29,27 @@ test("advance is subtracted from net but not from totalDeduction", () => {
   assert.equal(r.netPayable, 30000 - 3660 - 2000);
 });
 
+test("gross exactly at the ESIC threshold (21000) still gets ESIC — condition is <=, not <", () => {
+  const r = calculateInHouseWageLine({ basicSalary: 21000 });
+  assert.equal(r.grossEarning, 21000);
+  assert.equal(r.esic, 157.5); // 21000 * 0.75%
+});
+
+test("one paisa above the ESIC threshold gets no ESIC", () => {
+  const r = calculateInHouseWageLine({ basicSalary: 21000, bonus: 0.01 });
+  assert.equal(r.grossEarning, 21000.01);
+  assert.equal(r.esic, 0);
+});
+
+test("zero basic salary and no other inputs nets to zero", () => {
+  const r = calculateInHouseWageLine({ basicSalary: 0 });
+  assert.equal(r.grossEarning, 0);
+  assert.equal(r.pf, 0);
+  assert.equal(r.esic, 0);
+  assert.equal(r.lwf, 0);
+  assert.equal(r.netPayable, 0);
+});
+
 test("register totals recompute at full precision before rounding", () => {
   const totals = sumInHouseWageLines([
     { basicSalary: 30000 },

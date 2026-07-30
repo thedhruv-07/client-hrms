@@ -11,7 +11,7 @@ export const inHouseEmployeesRouter = Router();
 
 inHouseEmployeesRouter.use(requireAuth);
 
-const createSchema = z.object({
+export const createSchema = z.object({
   code: z.string().min(1),
   name: z.string().min(1),
   basicSalary: z.number().positive(),
@@ -26,7 +26,7 @@ const createSchema = z.object({
   uan: z.string().optional(),
 });
 
-const updateSchema = createSchema.partial().extend({
+export const updateSchema = createSchema.partial().extend({
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
 });
 
@@ -58,6 +58,25 @@ function idParam(req: Request): string | undefined {
   return typeof id === "string" ? id : undefined;
 }
 
+/**
+ * @openapi
+ * /in-house-employees:
+ *   get:
+ *     tags: [In-House Employees]
+ *     summary: List in-house employees
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema: { type: string }
+ *         description: Case-insensitive substring match on name or code
+ *     responses:
+ *       200:
+ *         description: Array of in-house employees
+ *         content:
+ *           application/json:
+ *             schema: { type: array, items: { $ref: '#/components/schemas/InHouseEmployee' } }
+ *       401: { description: Missing or invalid token }
+ */
 inHouseEmployeesRouter.get("/", async (req, res) => {
   const q = queryString(req.query["q"]);
   const employees = await prisma.inHouseEmployee.findMany({
@@ -69,6 +88,19 @@ inHouseEmployeesRouter.get("/", async (req, res) => {
   res.json(employees);
 });
 
+/**
+ * @openapi
+ * /in-house-employees/export:
+ *   get:
+ *     tags: [In-House Employees]
+ *     summary: Export all in-house employees as CSV
+ *     responses:
+ *       200:
+ *         description: CSV file (code,name,basicSalary,department,designation,joiningDate,leaveBalance,bankAccount,ifsc,pfNo,esicNo,uan,status)
+ *         content:
+ *           text/csv: { schema: { type: string } }
+ *       401: { description: Missing or invalid token }
+ */
 // Registered before "/:id" so "export" isn't captured as an id.
 inHouseEmployeesRouter.get("/export", async (_req, res) => {
   const employees = await prisma.inHouseEmployee.findMany({ orderBy: { code: "asc" } });
@@ -95,6 +127,30 @@ inHouseEmployeesRouter.get("/export", async (_req, res) => {
   res.send(csv);
 });
 
+/**
+ * @openapi
+ * /in-house-employees/import:
+ *   post:
+ *     tags: [In-House Employees]
+ *     summary: Bulk-create in-house employees from CSV (ADMIN, HR)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [csv]
+ *             properties:
+ *               csv: { type: string, description: "Header row: code,name,basicSalary,department,designation,joiningDate,leaveBalance,bankAccount,ifsc,pfNo,esicNo,uan" }
+ *     responses:
+ *       200:
+ *         description: Per-row results — a row failing validation or a duplicate code doesn't abort the rest of the import
+ *         content:
+ *           application/json: { schema: { $ref: '#/components/schemas/ImportResult' } }
+ *       400: { description: Malformed request body }
+ *       401: { description: Missing or invalid token }
+ *       403: { description: Requires ADMIN or HR }
+ */
 // Registered before "/:id" so "import" isn't captured as an id.
 inHouseEmployeesRouter.post("/import", requireRole("ADMIN", "HR"), async (req, res) => {
   const parsedBody = importSchema.safeParse(req.body);
@@ -141,6 +197,22 @@ inHouseEmployeesRouter.post("/import", requireRole("ADMIN", "HR"), async (req, r
   res.json({ created, total: rows.length, results });
 });
 
+/**
+ * @openapi
+ * /in-house-employees/{id}:
+ *   get:
+ *     tags: [In-House Employees]
+ *     summary: Get an in-house employee by id
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: The employee, content: { application/json: { schema: { $ref: '#/components/schemas/InHouseEmployee' } } } }
+ *       401: { description: Missing or invalid token }
+ *       404: { description: Not found }
+ */
 inHouseEmployeesRouter.get("/:id", async (req, res) => {
   const employee = await prisma.inHouseEmployee.findUnique({ where: { id: idParam(req) } });
   if (!employee) {
@@ -150,6 +222,39 @@ inHouseEmployeesRouter.get("/:id", async (req, res) => {
   res.json(employee);
 });
 
+/**
+ * @openapi
+ * /in-house-employees:
+ *   post:
+ *     tags: [In-House Employees]
+ *     summary: Create an in-house employee (ADMIN, HR)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [code, name, basicSalary, department, designation, joiningDate]
+ *             properties:
+ *               code: { type: string }
+ *               name: { type: string }
+ *               basicSalary: { type: number, exclusiveMinimum: 0 }
+ *               department: { type: string }
+ *               designation: { type: string }
+ *               joiningDate: { type: string, format: date }
+ *               leaveBalance: { type: number, minimum: 0 }
+ *               bankAccount: { type: string }
+ *               ifsc: { type: string }
+ *               pfNo: { type: string }
+ *               esicNo: { type: string }
+ *               uan: { type: string }
+ *     responses:
+ *       201: { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/InHouseEmployee' } } } }
+ *       400: { description: Validation error }
+ *       401: { description: Missing or invalid token }
+ *       403: { description: Requires ADMIN or HR }
+ *       409: { description: Code already in use }
+ */
 inHouseEmployeesRouter.post("/", requireRole("ADMIN", "HR"), async (req, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -169,6 +274,45 @@ inHouseEmployeesRouter.post("/", requireRole("ADMIN", "HR"), async (req, res) =>
   }
 });
 
+/**
+ * @openapi
+ * /in-house-employees/{id}:
+ *   put:
+ *     tags: [In-House Employees]
+ *     summary: Update an in-house employee (ADMIN, HR)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: All fields optional — partial update
+ *             properties:
+ *               code: { type: string }
+ *               name: { type: string }
+ *               basicSalary: { type: number, exclusiveMinimum: 0 }
+ *               department: { type: string }
+ *               designation: { type: string }
+ *               joiningDate: { type: string, format: date }
+ *               leaveBalance: { type: number, minimum: 0 }
+ *               bankAccount: { type: string }
+ *               ifsc: { type: string }
+ *               pfNo: { type: string }
+ *               esicNo: { type: string }
+ *               uan: { type: string }
+ *               status: { type: string, enum: [ACTIVE, INACTIVE] }
+ *     responses:
+ *       200: { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/InHouseEmployee' } } } }
+ *       400: { description: Validation error }
+ *       401: { description: Missing or invalid token }
+ *       403: { description: Requires ADMIN or HR }
+ *       404: { description: Not found }
+ */
 inHouseEmployeesRouter.put("/:id", requireRole("ADMIN", "HR"), async (req, res) => {
   const parsed = updateSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -191,6 +335,24 @@ inHouseEmployeesRouter.put("/:id", requireRole("ADMIN", "HR"), async (req, res) 
   }
 });
 
+/**
+ * @openapi
+ * /in-house-employees/{id}:
+ *   delete:
+ *     tags: [In-House Employees]
+ *     summary: Deactivate an in-house employee (ADMIN)
+ *     description: Soft delete — sets status to INACTIVE. Historical PayrollLine rows reference this employee, so it's never hard-deleted.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Deactivated, content: { application/json: { schema: { $ref: '#/components/schemas/InHouseEmployee' } } } }
+ *       401: { description: Missing or invalid token }
+ *       403: { description: Requires ADMIN }
+ *       404: { description: Not found }
+ */
 // Soft delete only: InHouseEmployee rows are referenced by historical
 // PayrollLine rows, so a hard delete would either fail the FK constraint
 // or silently orphan past payroll runs. Deactivating preserves history.
