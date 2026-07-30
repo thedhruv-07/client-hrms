@@ -33,13 +33,18 @@ test("PF defaults to 0 when not supplied", () => {
 });
 
 test("register totals match the sheet's row-6 column totals", () => {
-  const lines = [
-    calculateWageLine({ basicSalary: 17000, workingDays: 23, otHours: 58, advance: 1000 }),
-    calculateWageLine({ basicSalary: 17000, workingDays: 18, otHours: 51, advance: 5000 }),
-    calculateWageLine({ basicSalary: 17000, workingDays: 3, otHours: 1 }),
+  const inputs = [
+    { basicSalary: 17000, workingDays: 23, otHours: 58, advance: 1000 },
+    { basicSalary: 17000, workingDays: 18, otHours: 51, advance: 5000 },
+    { basicSalary: 17000, workingDays: 3, otHours: 1 },
   ];
-  const totals = sumWageLines(lines);
+  const totals = sumWageLines(inputs);
   assert.equal(totals.grossEarning, 32725.00);
   assert.equal(totals.totalDeduction, 310.89);
   assert.equal(totals.netPayable, 26414.11);
+  // Feeds the bill engine's E10/E14 — summing pre-rounded per-worker values
+  // instead (13033.33+10200+1700=24933.33 ok, but 4108.33+3612.50+70.83=
+  // 7791.66) would be a paisa short of the OT total Excel actually carries.
+  assert.equal(totals.basicEarn, 24933.33);
+  assert.equal(totals.otAmount, 7791.67);
 });

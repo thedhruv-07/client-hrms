@@ -32,7 +32,7 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-export function calculateWageLine(input: WageInput): WageResult {
+function computeRaw(input: WageInput) {
   const { basicSalary, workingDays, otHours, pf = 0, advance = 0 } = input;
 
   const basicEarn = (basicSalary / 30) * workingDays; // G
@@ -43,27 +43,39 @@ export function calculateWageLine(input: WageInput): WageResult {
   const totalDeduction = pf + esic + lwf; // N = SUM(J:L)
   const netPayable = grossEarning - totalDeduction - advance; // O = I-N-M
 
+  return { basicEarn, otAmount, grossEarning, pf, esic, lwf, advance, totalDeduction, netPayable };
+}
+
+export function calculateWageLine(input: WageInput): WageResult {
+  const raw = computeRaw(input);
   return {
-    basicEarn: round2(basicEarn),
-    otAmount: round2(otAmount),
-    grossEarning: round2(grossEarning),
-    pf: round2(pf),
-    esic: round2(esic),
-    lwf: round2(lwf),
-    advance: round2(advance),
-    totalDeduction: round2(totalDeduction),
-    netPayable: round2(netPayable),
+    basicEarn: round2(raw.basicEarn),
+    otAmount: round2(raw.otAmount),
+    grossEarning: round2(raw.grossEarning),
+    pf: round2(raw.pf),
+    esic: round2(raw.esic),
+    lwf: round2(raw.lwf),
+    advance: round2(raw.advance),
+    totalDeduction: round2(raw.totalDeduction),
+    netPayable: round2(raw.netPayable),
   };
 }
 
-/** Row 6 column totals — plain sum of the already-rounded per-worker rows, matching the sheet's SUM() over displayed cells. */
-export function sumWageLines(lines: WageResult[]): Omit<WageResult, "pf" | "esic" | "lwf" | "advance"> {
-  const sum = (pick: (l: WageResult) => number) => round2(lines.reduce((acc, l) => acc + pick(l), 0));
+/**
+ * Row 6 column totals. Recomputes each worker at full precision and sums
+ * before rounding — matching Excel's SUM(), which reads the unrounded
+ * underlying cell values regardless of 2-decimal display formatting. Summing
+ * already-rounded per-worker rows instead would be off by a paisa on real
+ * data (verified against the bill engine's known Grand Total fixture).
+ */
+export function sumWageLines(lines: WageInput[]): Omit<WageResult, "pf" | "esic" | "lwf" | "advance"> {
+  const raws = lines.map(computeRaw);
+  const sum = (pick: (r: ReturnType<typeof computeRaw>) => number) => round2(raws.reduce((acc, r) => acc + pick(r), 0));
   return {
-    basicEarn: sum((l) => l.basicEarn),
-    otAmount: sum((l) => l.otAmount),
-    grossEarning: sum((l) => l.grossEarning),
-    totalDeduction: sum((l) => l.totalDeduction),
-    netPayable: sum((l) => l.netPayable),
+    basicEarn: sum((r) => r.basicEarn),
+    otAmount: sum((r) => r.otAmount),
+    grossEarning: sum((r) => r.grossEarning),
+    totalDeduction: sum((r) => r.totalDeduction),
+    netPayable: sum((r) => r.netPayable),
   };
 }
