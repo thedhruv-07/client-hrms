@@ -2,6 +2,7 @@ import { Router, type Request } from "express";
 import { prisma } from "../lib/prisma";
 import { requireAuth } from "../middleware/auth";
 import { sumBy, groupSumBy } from "../reports/aggregate";
+import { queryString, queryNumber } from "../lib/query";
 
 export const reportsRouter = Router();
 
@@ -9,17 +10,6 @@ reportsRouter.use(requireAuth);
 
 function num(v: unknown): number {
   return Number(v);
-}
-
-function queryString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
-}
-
-function queryNumber(value: unknown): number | undefined {
-  const s = queryString(value);
-  if (s === undefined) return undefined;
-  const n = Number(s);
-  return Number.isNaN(n) ? undefined : n;
 }
 
 /** Optional exact year/month filter, shared by every report keyed off PayrollRun. Deliberately no from/to range: real usage is "this month" or "this year", and a range needs either raw SQL or fetch-then-filter for no real payoff yet. */

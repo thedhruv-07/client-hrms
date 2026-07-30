@@ -5,6 +5,7 @@ import { authRouter } from "./routes/auth";
 import { contractWorkersRouter } from "./routes/contractWorkers";
 import { inHouseEmployeesRouter } from "./routes/inHouseEmployees";
 import { reportsRouter } from "./routes/reports";
+import { backupRouter } from "./routes/backup";
 import { errorHandler } from "./middleware/errorHandler";
 
 const app = express();
@@ -19,6 +20,7 @@ app.use("/auth", authRouter);
 app.use("/contract-workers", contractWorkersRouter);
 app.use("/in-house-employees", inHouseEmployeesRouter);
 app.use("/reports", reportsRouter);
+app.use("/backup", backupRouter);
 
 app.use(errorHandler);
 
