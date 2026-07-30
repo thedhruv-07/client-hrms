@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import { authRouter } from "./routes/auth";
 import { contractWorkersRouter } from "./routes/contractWorkers";
+import { inHouseEmployeesRouter } from "./routes/inHouseEmployees";
 import { errorHandler } from "./middleware/errorHandler";
 
 const app = express();
@@ -15,6 +16,7 @@ app.get("/health", (_req, res) => {
 
 app.use("/auth", authRouter);
 app.use("/contract-workers", contractWorkersRouter);
+app.use("/in-house-employees", inHouseEmployeesRouter);
 
 app.use(errorHandler);
 
