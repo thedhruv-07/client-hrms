@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  HR
+  ACCOUNTANT
+  VIEWER
+}
+
+enum PayrollType {
+  CONTRACT
+  INHOUSE
+}
+
+enum PayrollStatus {
+  DRAFT
+  FINALIZED
+  PAID
+}
+
+enum WorkerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(VIEWER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  payrollRuns PayrollRun[]
+  auditLogs   AuditLog[]
+}
+
+/// The contractor's own letterhead details, used to populate wage-sheet and bill headers.
+model Company {
+  id          String   @id @default(cuid())
+  name        String
+  address     String
+  mobile      String?
+  gstNo       String?
+  panNo       String?
+  pfCode      String?
+  esiCode     String?
+  bankName    String?
+  bankAccount String?
+  ifsc        String?
+  branch      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// A billing target for contract labour — a client company invoiced monthly.
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  address   String
+  gstNo     String?
+  panNo     String?
+  hsnSac    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bills Bill[]
+}
+
+model ContractWorker {
+  id           String       @id @default(cuid())
+  code         String       @unique
+  name         String
+  basicSalary  Decimal      @db.Decimal(12, 2)
+  bankAccount  String?
+  ifsc         String?
+  pfNo         String?
+  esicNo       String?
+  uan          String?
+  status       WorkerStatus @default(ACTIVE)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  payrollLines PayrollLine[]
+}
+
+model InHouseEmployee {
+  id           String       @id @default(cuid())
+  code         String       @unique
+  name         String
+  basicSalary  Decimal      @db.Decimal(12, 2)
+  department   String
+  designation  String
+  joiningDate  DateTime
+  leaveBalance Decimal      @default(0) @db.Decimal(6, 2)
+  bankAccount  String?
+  ifsc         String?
+  pfNo         String?
+  esicNo       String?
+  uan          String?
+  status       WorkerStatus @default(ACTIVE)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  payrollLines PayrollLine[]
+}
+
+model PayrollRun {
+  id          String        @id @default(cuid())
+  month       Int
+  year        Int
+  type        PayrollType
+  status      PayrollStatus @default(DRAFT)
+  createdById String
+  createdBy   User          @relation(fields: [createdById], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  lines PayrollLine[]
+  bills Bill[]
+
+  @@unique([month, year, type])
+}
+
+/// Mirrors the wage-sheet row exactly. One row type serves both modules —
+/// exactly one of contractWorkerId / inHouseEmployeeId is set per row.
+model PayrollLine {
+  id               String  @id @default(cuid())
+  payrollRunId     String
+  payrollRun       PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  contractWorkerId String?
+  contractWorker   ContractWorker?  @relation(fields: [contractWorkerId], references: [id])
+  inHouseEmployeeId String?
+  inHouseEmployee  InHouseEmployee? @relation(fields: [inHouseEmployeeId], references: [id])
+
+  workingDays     Decimal @db.Decimal(5, 2)
+  otHours         Decimal @default(0) @db.Decimal(6, 2)
+  basicEarn       Decimal @db.Decimal(12, 2)
+  otAmount        Decimal @default(0) @db.Decimal(12, 2)
+  grossEarning    Decimal @db.Decimal(12, 2)
+  pf              Decimal @default(0) @db.Decimal(12, 2)
+  esic            Decimal @default(0) @db.Decimal(12, 2)
+  lwf             Decimal @default(0) @db.Decimal(12, 2)
+  advance         Decimal @default(0) @db.Decimal(12, 2)
+  totalDeduction  Decimal @db.Decimal(12, 2)
+  netPayable      Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// A client GST bill for one month of contract labour.
+model Bill {
+  id           String   @id @default(cuid())
+  clientId     String
+  client       Client   @relation(fields: [clientId], references: [id])
+  payrollRunId String
+  payrollRun   PayrollRun @relation(fields: [payrollRunId], references: [id])
+  billNo       String   @unique
+  billDate     DateTime
+  month        Int
+  year         Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  line BillLine?
+}
+
+/// Mirrors the bill-sheet rows. One-to-one with Bill.
+model BillLine {
+  id     String @id @default(cuid())
+  billId String @unique
+  bill   Bill   @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  basicWages    Decimal @db.Decimal(12, 2)
+  hra           Decimal @default(0) @db.Decimal(12, 2)
+  con           Decimal @default(0) @db.Decimal(12, 2)
+  /// Labeled "INCENTIVE AMT." on the printed bill; actually the OT total (Table 1 OT column) — kept for continuity with bills already issued.
+  incentiveAmt  Decimal @default(0) @db.Decimal(12, 2)
+  total1        Decimal @db.Decimal(12, 2)
+  esiEmployer   Decimal @db.Decimal(12, 2)
+  esiEmployee   Decimal @db.Decimal(12, 2)
+  lwf1          Decimal @db.Decimal(12, 2)
+  serviceCharge Decimal @db.Decimal(12, 2)
+  /// Second LWF calc (0.2% of basicWages, x2) — distinct base/multiplier from lwf1, not a duplicate.
+  lwf2          Decimal @db.Decimal(12, 2)
+  total2        Decimal @db.Decimal(12, 2)
+  cgst          Decimal @db.Decimal(12, 2)
+  sgst          Decimal @db.Decimal(12, 2)
+  grandTotal    Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String
+  changes    Json?
+  createdAt  DateTime @default(now())
+}
