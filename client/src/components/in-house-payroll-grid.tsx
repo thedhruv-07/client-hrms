@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listInHouseEmployees } from "@/services/inHouseEmployees";
-import { getPayrollRun, getPayrollLines, generateSalarySheet } from "@/services/payrollRuns";
+import { getPayrollRun, getPayrollLines } from "@/services/payrollRuns";
 import { calculateInHouseWageLine, sumInHouseWageLines } from "@/lib/calc";
+import { downloadInHousePayroll } from "@/lib/exportExcel";
 import { monthLabel } from "@/lib/date";
 import { formatCurrencyPrecise } from "@/lib/format";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableFooter } from "@/components/ui/table";
@@ -74,10 +75,26 @@ export function InHousePayrollGrid({ month, year }: { month: number; year: numbe
   async function onGenerate() {
     setGenerating(true);
     try {
-      const result = await generateSalarySheet(month, year, "INHOUSE");
-      toast({ title: "Salary slips generated", description: result.filename });
+      await downloadInHousePayroll({
+        monthLabel: monthLabel(month, year),
+        rows: computed.map(({ row, result }) => ({
+          code: row.code,
+          name: row.name,
+          unpaidLeaveDays: row.unpaidLeaveDays,
+          bonus: result.bonus,
+          incentive: result.incentive,
+          advance: row.advance,
+          grossEarning: result.grossEarning,
+          pf: result.pf,
+          esic: result.esic,
+          totalDeduction: result.totalDeduction,
+          netPayable: result.netPayable,
+        })),
+        totals,
+      });
+      toast({ title: "Payroll summary downloaded", description: `inhouse-payroll-${monthLabel(month, year).toLowerCase()}.xlsx` });
     } catch {
-      toast({ title: "Could not generate salary slips", variant: "destructive" });
+      toast({ title: "Could not generate the payroll summary", variant: "destructive" });
     } finally {
       setGenerating(false);
     }
@@ -98,7 +115,7 @@ export function InHousePayrollGrid({ month, year }: { month: number; year: numbe
         </div>
         <Button onClick={onGenerate} disabled={generating}>
           <Download className="size-4" />
-          {generating ? "Generating…" : "Generate Salary Sheet"}
+          {generating ? "Preparing…" : "Download Payroll Summary (.xlsx)"}
         </Button>
       </div>
 

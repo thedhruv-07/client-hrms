@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listContractWorkers } from "@/services/contractWorkers";
-import { getPayrollRun, getPayrollLines, generateSalarySheet } from "@/services/payrollRuns";
+import { getPayrollRun, getPayrollLines } from "@/services/payrollRuns";
 import { calculateWageLine, sumWageLines } from "@/lib/calc";
+import { downloadWageRegister } from "@/lib/exportExcel";
 import { daysInMonth, monthLabel } from "@/lib/date";
 import { formatCurrencyPrecise } from "@/lib/format";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableFooter } from "@/components/ui/table";
@@ -71,10 +72,27 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
   async function onGenerate() {
     setGenerating(true);
     try {
-      const result = await generateSalarySheet(month, year, "CONTRACT");
-      toast({ title: "Salary sheet generated", description: result.filename });
+      await downloadWageRegister({
+        monthLabel: monthLabel(month, year),
+        rows: computed.map(({ row, result }) => ({
+          code: row.code,
+          name: row.name,
+          workingDays: row.workingDays,
+          otHours: row.otHours,
+          basicEarn: result.basicEarn,
+          otAmount: result.otAmount,
+          grossEarning: result.grossEarning,
+          esic: result.esic,
+          lwf: result.lwf,
+          advance: result.advance,
+          totalDeduction: result.totalDeduction,
+          netPayable: result.netPayable,
+        })),
+        totals,
+      });
+      toast({ title: "Wage register downloaded", description: `wage-register-${monthLabel(month, year).toLowerCase()}.xlsx` });
     } catch {
-      toast({ title: "Could not generate salary sheet", variant: "destructive" });
+      toast({ title: "Could not generate the wage register", variant: "destructive" });
     } finally {
       setGenerating(false);
     }
@@ -95,7 +113,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
         </div>
         <Button onClick={onGenerate} disabled={generating}>
           <Download className="size-4" />
-          {generating ? "Generating…" : "Generate Salary Sheet"}
+          {generating ? "Preparing…" : "Download Wage Register (.xlsx)"}
         </Button>
       </div>
 
