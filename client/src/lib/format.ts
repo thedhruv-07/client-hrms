@@ -1,0 +1,11 @@
+export function formatCurrency(n: number): string {
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
+}
+
+export function formatCurrencyPrecise(n: number): string {
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+}
+
+export function formatNumber(n: number): string {
+  return new Intl.NumberFormat("en-IN").format(n);
+}

@@ -1,1 +1,92 @@
 @import "tailwindcss";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource/source-serif-4/400.css";
+@import "@fontsource/source-serif-4/600.css";
+
+/* Manual (class-based) dark mode instead of Tailwind v4's default
+   prefers-color-scheme-only variant — the app has a toggle. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --ink-900: #1b2a41;
+  --paper-50: #eff1ec;
+  --paper-900: #101820;
+  --seal-600: #b7862c;
+  --line-200: #d8dcd3;
+  --positive-600: #2f6f5e;
+  --danger-600: #a6432f;
+
+  --background: var(--paper-50);
+  --foreground: var(--ink-900);
+  --surface: #ffffff;
+  --border: var(--line-200);
+  --accent: var(--seal-600);
+  --accent-foreground: #fffaf0;
+  --positive: var(--positive-600);
+  --danger: var(--danger-600);
+  --muted: #5a6472;
+}
+
+.dark {
+  --background: var(--paper-900);
+  --foreground: #e7e9e4;
+  --surface: #16202c;
+  --border: #26313e;
+  --accent: var(--seal-600);
+  --accent-foreground: #16130a;
+  --positive: #4b9c86;
+  --danger: #d97a5c;
+  --muted: #8b95a1;
+}
+
+@theme {
+  --font-display: "Source Serif 4", Georgia, serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --color-ink-900: var(--ink-900);
+  --color-paper-50: var(--paper-50);
+  --color-paper-900: var(--paper-900);
+  --color-seal-600: var(--seal-600);
+  --color-line-200: var(--line-200);
+  --color-positive-600: var(--positive-600);
+  --color-danger-600: var(--danger-600);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-positive: var(--positive);
+  --color-danger: var(--danger);
+  --color-muted: var(--muted);
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+/* Ledger figures: currency, worker/employee codes, GST/PF/ESIC numbers. */
+.figure {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hairline rule, used instead of shadows for separation. */
+.ledger-rule {
+  border-color: var(--color-border);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
