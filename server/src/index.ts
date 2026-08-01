@@ -6,6 +6,8 @@ import { authRouter } from "./routes/auth";
 import { contractWorkersRouter } from "./routes/contractWorkers";
 import { inHouseEmployeesRouter } from "./routes/inHouseEmployees";
 import { reportsRouter } from "./routes/reports";
+import { payrollRunsRouter } from "./routes/payrollRuns";
+import { billsRouter } from "./routes/bills";
 import { backupRouter } from "./routes/backup";
 import { docsRouter } from "./docs";
 import { errorHandler } from "./middleware/errorHandler";
@@ -27,6 +29,8 @@ app.use("/auth", authRouter);
 app.use("/contract-workers", contractWorkersRouter);
 app.use("/in-house-employees", inHouseEmployeesRouter);
 app.use("/reports", reportsRouter);
+app.use("/payroll-runs", payrollRunsRouter);
+app.use("/bills", billsRouter);
 app.use("/backup", backupRouter);
 app.use("/docs", docsRouter);
 

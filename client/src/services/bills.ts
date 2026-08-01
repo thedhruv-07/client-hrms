@@ -1,23 +1,25 @@
-import type { Bill, BillLine } from "@/types";
-import { bills, billLines, client } from "./mock/seed";
-import { delay } from "./mock/db";
+import type { Bill, BillLine, Client } from "@/types";
+import { api, ApiRequestError } from "./api";
 
 export interface BillWithLine extends Bill {
-  clientName: string;
+  client: Client;
   line: BillLine | null;
 }
 
 export async function listBills(): Promise<BillWithLine[]> {
-  const rows: BillWithLine[] = bills.map((b) => ({
-    ...b,
-    clientName: client.name,
-    line: billLines.find((bl) => bl.billId === b.id) ?? null,
-  }));
-  return delay(rows.sort((a, b) => b.year - a.year || b.month - a.month));
+  return api.get<BillWithLine[]>("/bills");
 }
 
 export async function getBill(id: string): Promise<BillWithLine | null> {
-  const bill = bills.find((b) => b.id === id);
-  if (!bill) return delay(null);
-  return delay({ ...bill, clientName: client.name, line: billLines.find((bl) => bl.billId === bill.id) ?? null });
+  try {
+    return await api.get<BillWithLine>(`/bills/${id}`);
+  } catch (err) {
+    if (err instanceof ApiRequestError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+/** Sums the period's contract wage register (basicEarn, otAmount) server-side and bills it. */
+export async function generateBill(month: number, year: number): Promise<BillWithLine> {
+  return api.post<BillWithLine>("/bills/generate", { month, year });
 }

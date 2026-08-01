@@ -24,7 +24,8 @@ export class ApiRequestError extends Error {
   body: unknown;
 
   constructor(status: number, body: unknown) {
-    super(`Request failed with status ${status}`);
+    const serverMessage = typeof body === "object" && body !== null && typeof (body as { error?: unknown }).error === "string" ? (body as { error: string }).error : undefined;
+    super(serverMessage ?? `Request failed with status ${status}`);
     this.status = status;
     this.body = body;
   }

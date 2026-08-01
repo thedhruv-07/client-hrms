@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listContractWorkers } from "@/services/contractWorkers";
-import { getPayrollRun, getPayrollLines } from "@/services/payrollRuns";
+import { getPayrollRun, getPayrollLines, saveContractPayrollRun } from "@/services/payrollRuns";
 import { calculateWageLine, sumWageLines } from "@/lib/calc";
 import { downloadWageRegister } from "@/lib/exportExcel";
 import { daysInMonth, monthLabel } from "@/lib/date";
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StampBadge } from "@/components/ui/stamp-badge";
-import { Download } from "lucide-react";
+import { Download, Save } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 interface Row {
@@ -26,6 +26,7 @@ interface Row {
 
 export function ContractPayrollGrid({ month, year }: { month: number; year: number }) {
   const maxDays = daysInMonth(month, year);
+  const queryClient = useQueryClient();
 
   const workersQuery = useQuery({ queryKey: ["contract-workers", ""], queryFn: () => listContractWorkers() });
   const runQuery = useQuery({ queryKey: ["payroll-run", "CONTRACT", month, year], queryFn: () => getPayrollRun(month, year, "CONTRACT") });
@@ -35,8 +36,11 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
     enabled: !!runQuery.data,
   });
 
+  const isFinalized = runQuery.data?.status === "FINALIZED";
+
   const [rows, setRows] = useState<Row[] | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const isLoading = workersQuery.isLoading || runQuery.isLoading || (!!runQuery.data && linesQuery.isLoading);
 
@@ -98,6 +102,27 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
     }
   }
 
+  async function onSave() {
+    if (!rows) return;
+    setSaving(true);
+    try {
+      await saveContractPayrollRun(
+        month,
+        year,
+        rows.map((r) => ({ contractWorkerId: r.workerId, workingDays: r.workingDays, otHours: r.otHours, advance: r.advance }))
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["payroll-run", "CONTRACT", month, year] }),
+        queryClient.invalidateQueries({ queryKey: ["payroll-lines"] }),
+      ]);
+      toast({ title: "Wage register saved", description: `${monthLabel(month, year)} — ${rows.length} worker(s).` });
+    } catch (err) {
+      toast({ title: "Could not save", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (isLoading || !rows) {
     return <Skeleton className="h-96 w-full" />;
   }
@@ -111,10 +136,18 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
             {runQuery.data?.status ?? "DRAFT"}
           </StampBadge>
         </div>
-        <Button onClick={onGenerate} disabled={generating}>
-          <Download className="size-4" />
-          {generating ? "Preparing…" : "Download Wage Register (.xlsx)"}
-        </Button>
+        <div className="flex items-center gap-2">
+          {!isFinalized ? (
+            <Button onClick={onSave} disabled={saving} variant="outline">
+              <Save className="size-4" />
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          ) : null}
+          <Button onClick={onGenerate} disabled={generating}>
+            <Download className="size-4" />
+            {generating ? "Preparing…" : "Download Wage Register (.xlsx)"}
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-md border border-border bg-surface">
@@ -150,6 +183,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
                       step="1"
                       className={`figure ml-auto h-8 w-20 text-right ${overMax ? "border-danger text-danger" : ""}`}
                       value={row.workingDays}
+                      disabled={isFinalized}
                       onChange={(e) => updateRow(row.workerId, { workingDays: Number(e.target.value) })}
                     />
                     {overMax ? <p className="mt-1 text-xs text-danger">Max {maxDays} days</p> : null}
@@ -161,6 +195,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
                       step="1"
                       className="figure ml-auto h-8 w-20 text-right"
                       value={row.otHours}
+                      disabled={isFinalized}
                       onChange={(e) => updateRow(row.workerId, { otHours: Number(e.target.value) })}
                     />
                   </TableCell>
@@ -171,6 +206,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
                       step="1"
                       className="figure ml-auto h-8 w-24 text-right"
                       value={row.advance}
+                      disabled={isFinalized}
                       onChange={(e) => updateRow(row.workerId, { advance: Number(e.target.value) })}
                     />
                   </TableCell>

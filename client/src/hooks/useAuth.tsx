@@ -24,6 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     meService(token)
       .then(setUser)
+      .catch(() => setStoredToken(null))
       .finally(() => setIsLoading(false));
   }, []);
 

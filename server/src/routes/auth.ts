@@ -88,9 +88,15 @@ authRouter.post("/login", loginRateLimit, async (req, res) => {
  *     summary: Get the current authenticated user
  *     responses:
  *       200:
- *         description: The decoded JWT claims (id, email, role)
+ *         description: The current user's profile (id, email, name, role)
  *       401: { description: Missing or invalid token }
+ *       404: { description: User no longer exists }
  */
-authRouter.get("/me", requireAuth, (req, res) => {
-  res.json({ user: req.user });
+authRouter.get("/me", requireAuth, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+  if (!user) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  res.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role } });
 });

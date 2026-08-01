@@ -1,6 +1,5 @@
 import type { ContractWorker } from "@/types";
-import { contractWorkers } from "./mock/seed";
-import { delay, makeId } from "./mock/db";
+import { api, ApiRequestError } from "./api";
 
 export interface ContractWorkerInput {
   code: string;
@@ -14,63 +13,27 @@ export interface ContractWorkerInput {
 }
 
 export async function listContractWorkers(q?: string): Promise<ContractWorker[]> {
-  const filtered = q
-    ? contractWorkers.filter(
-        (w) => w.name.toLowerCase().includes(q.toLowerCase()) || w.code.toLowerCase().includes(q.toLowerCase())
-      )
-    : contractWorkers;
-  return delay([...filtered].sort((a, b) => a.code.localeCompare(b.code)));
+  return api.get<ContractWorker[]>(`/contract-workers${q ? `?q=${encodeURIComponent(q)}` : ""}`);
 }
 
 export async function getContractWorker(id: string): Promise<ContractWorker | null> {
-  return delay(contractWorkers.find((w) => w.id === id) ?? null);
+  try {
+    return await api.get<ContractWorker>(`/contract-workers/${id}`);
+  } catch (err) {
+    if (err instanceof ApiRequestError && err.status === 404) return null;
+    throw err;
+  }
 }
 
 export async function createContractWorker(input: ContractWorkerInput): Promise<ContractWorker> {
-  if (contractWorkers.some((w) => w.code === input.code)) {
-    throw new Error("Code already in use");
-  }
-  const now = new Date().toISOString();
-  const worker: ContractWorker = {
-    id: makeId("cw"),
-    code: input.code,
-    name: input.name,
-    basicSalary: input.basicSalary.toFixed(2),
-    bankAccount: input.bankAccount ?? null,
-    ifsc: input.ifsc ?? null,
-    pfNo: input.pfNo ?? null,
-    esicNo: input.esicNo ?? null,
-    uan: input.uan ?? null,
-    status: "ACTIVE",
-    createdAt: now,
-    updatedAt: now,
-  };
-  contractWorkers.push(worker);
-  return delay(worker);
+  return api.post<ContractWorker>("/contract-workers", input);
 }
 
 export async function updateContractWorker(id: string, input: Partial<ContractWorkerInput> & { status?: ContractWorker["status"] }): Promise<ContractWorker> {
-  const worker = contractWorkers.find((w) => w.id === id);
-  if (!worker) throw new Error("Not found");
-  if (input.code && input.code !== worker.code && contractWorkers.some((w) => w.code === input.code)) {
-    throw new Error("Code already in use");
-  }
-  Object.assign(worker, {
-    ...(input.code !== undefined ? { code: input.code } : {}),
-    ...(input.name !== undefined ? { name: input.name } : {}),
-    ...(input.basicSalary !== undefined ? { basicSalary: input.basicSalary.toFixed(2) } : {}),
-    ...(input.bankAccount !== undefined ? { bankAccount: input.bankAccount } : {}),
-    ...(input.ifsc !== undefined ? { ifsc: input.ifsc } : {}),
-    ...(input.pfNo !== undefined ? { pfNo: input.pfNo } : {}),
-    ...(input.esicNo !== undefined ? { esicNo: input.esicNo } : {}),
-    ...(input.uan !== undefined ? { uan: input.uan } : {}),
-    ...(input.status !== undefined ? { status: input.status } : {}),
-    updatedAt: new Date().toISOString(),
-  });
-  return delay(worker);
+  return api.put<ContractWorker>(`/contract-workers/${id}`, input);
 }
 
 /** Soft delete only — matches the server, since PayrollLine history references workers. */
 export async function deactivateContractWorker(id: string): Promise<ContractWorker> {
-  return updateContractWorker(id, { status: "INACTIVE" });
+  return api.delete<ContractWorker>(`/contract-workers/${id}`);
 }

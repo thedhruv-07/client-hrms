@@ -9,7 +9,7 @@ import { toast } from "@/hooks/use-toast";
 export function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("admin@lucky-enterprises.test");
+  const [email, setEmail] = useState("admin@example.com");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -19,8 +19,8 @@ export function Login() {
     try {
       await login(email, password);
       navigate("/", { replace: true });
-    } catch {
-      toast({ title: "Login failed", description: "Something went wrong.", variant: "destructive" });
+    } catch (err) {
+      toast({ title: "Login failed", description: err instanceof Error ? err.message : "Something went wrong.", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -34,14 +34,12 @@ export function Login() {
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="password">Password</Label>
-        <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Any password works" required />
+        <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
       </div>
       <Button type="submit" disabled={submitting} className="mt-2">
         {submitting ? "Signing in…" : "Sign in"}
       </Button>
-      <p className="text-center text-xs text-muted">
-        Mock auth — any password works. Type "hr@", "account@", or "viewer@" in the email to try other roles.
-      </p>
+      <p className="text-center text-xs text-muted">Seeded admin: admin@example.com / changeme123</p>
     </form>
   );
 }

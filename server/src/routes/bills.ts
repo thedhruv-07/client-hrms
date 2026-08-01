@@ -1,0 +1,154 @@
+
+import { Router } from "express";
+import { z } from "zod";
+import { prisma } from "../lib/prisma";
+import { requireAuth, requireRole } from "../middleware/auth";
+import { logAudit } from "../lib/audit";
+import { calculateBill } from "../engine/bill";
+
+export const billsRouter = Router();
+
+billsRouter.use(requireAuth);
+
+/**
+ * @openapi
+ * /bills:
+ *   get:
+ *     tags: [Bills]
+ *     summary: List client GST bills
+ *     responses:
+ *       200: { description: Bills with client and line detail }
+ *       401: { description: Missing or invalid token }
+ */
+billsRouter.get("/", async (_req, res) => {
+  const bills = await prisma.bill.findMany({
+    include: { client: true, line: true },
+    orderBy: [{ year: "desc" }, { month: "desc" }],
+  });
+  res.json(bills);
+});
+
+/**
+ * @openapi
+ * /bills/{id}:
+ *   get:
+ *     tags: [Bills]
+ *     summary: Get one bill
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Bill with client and line detail }
+ *       401: { description: Missing or invalid token }
+ *       404: { description: Not found }
+ */
+billsRouter.get("/:id", async (req, res) => {
+  const bill = await prisma.bill.findUnique({
+    where: { id: req.params["id"] },
+    include: { client: true, line: true },
+  });
+  if (!bill) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  res.json(bill);
+});
+
+export const generateSchema = z.object({
+  month: z.number().int().min(1).max(12),
+  year: z.number().int(),
+});
+
+/**
+ * @openapi
+ * /bills/generate:
+ *   post:
+ *     tags: [Bills]
+ *     summary: Generate (or regenerate) a client GST bill from a period's current contract wage register (ADMIN, HR, ACCOUNTANT)
+ *     description: If a bill already exists for the period, its line is recalculated from the wage register as it stands now and overwritten in place — same bill number, fresh numbers. Otherwise a new bill is created.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [month, year]
+ *             properties:
+ *               month: { type: integer, minimum: 1, maximum: 12 }
+ *               year: { type: integer }
+ *     responses:
+ *       200: { description: Existing bill recalculated and updated }
+ *       201: { description: Created bill with client and line detail }
+ *       400: { description: Validation error, or the period's wage register is empty }
+ *       401: { description: Missing or invalid token }
+ *       403: { description: Requires ADMIN, HR, or ACCOUNTANT }
+ *       404: { description: No contract payroll run for this period }
+ */
+billsRouter.post("/generate", requireRole("ADMIN", "HR", "ACCOUNTANT"), async (req, res) => {
+  const parsed = generateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const { month, year } = parsed.data;
+
+  const run = await prisma.payrollRun.findUnique({
+    where: { month_year_type: { month, year, type: "CONTRACT" } },
+    include: { lines: true },
+  });
+  if (!run) {
+    res.status(404).json({ error: "No contract payroll run for this period yet." });
+    return;
+  }
+
+  if (run.lines.length === 0) {
+    res.status(400).json({ error: "This period's wage register is empty." });
+    return;
+  }
+
+  const basicWages = run.lines.reduce((sum, l) => sum + Number(l.basicEarn), 0);
+  const incentiveAmt = run.lines.reduce((sum, l) => sum + Number(l.otAmount), 0);
+  const result = calculateBill({ basicWages, incentiveAmt });
+
+  const existing = await prisma.bill.findFirst({ where: { payrollRunId: run.id } });
+
+  if (existing) {
+    const bill = await prisma.bill.update({
+      where: { id: existing.id },
+      data: { line: { update: { ...result } } },
+      include: { client: true, line: true },
+    });
+    await logAudit({ userId: req.user!.id, action: "REGENERATE", entityType: "Bill", entityId: bill.id, changes: { billNo: bill.billNo, month, year } });
+    res.status(200).json(bill);
+    return;
+  }
+
+  // Single-client system for now — mirrors reports/bill-register and the client mock.
+  const client = await prisma.client.findFirst();
+  if (!client) {
+    res.status(400).json({ error: "No client configured." });
+    return;
+  }
+
+  const billCount = await prisma.bill.count();
+  const billNo = String(billCount + 1).padStart(3, "0");
+  const billDate = new Date(Date.UTC(year, month - 1, 28));
+
+  const bill = await prisma.bill.create({
+    data: {
+      clientId: client.id,
+      payrollRunId: run.id,
+      billNo,
+      billDate,
+      month,
+      year,
+      line: { create: { ...result } },
+    },
+    include: { client: true, line: true },
+  });
+
+  await logAudit({ userId: req.user!.id, action: "CREATE", entityType: "Bill", entityId: bill.id, changes: { billNo, month, year } });
+  res.status(201).json(bill);
+});

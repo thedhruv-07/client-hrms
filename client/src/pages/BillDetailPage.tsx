@@ -1,11 +1,16 @@
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import { getBill } from "@/services/bills";
+import { getCompany } from "@/services/company";
+import { downloadBill } from "@/lib/exportExcel";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { formatCurrencyPrecise } from "@/lib/format";
-import { monthLabel } from "@/lib/date";
+import { monthLabel, monthLabelShort } from "@/lib/date";
+import { toast } from "@/hooks/use-toast";
 import type { BillLine } from "@/types";
 
 function LineRow({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
@@ -20,13 +25,58 @@ function LineRow({ label, value, emphasis = false }: { label: string; value: str
 export function BillDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: bill, isLoading } = useQuery({ queryKey: ["bill", id], queryFn: () => getBill(id!), enabled: !!id });
+  const { data: company } = useQuery({ queryKey: ["company"], queryFn: getCompany });
+  const [downloading, setDownloading] = useState(false);
+
+  async function onDownload() {
+    if (!bill?.line || !company) return;
+    setDownloading(true);
+    try {
+      await downloadBill({
+        billNo: bill.billNo,
+        billDate: bill.billDate,
+        monthLabel: monthLabel(bill.month, bill.year),
+        monthLabelShort: monthLabelShort(bill.month, bill.year),
+        company,
+        client: bill.client,
+        line: {
+          basicWages: Number(bill.line.basicWages),
+          hra: Number(bill.line.hra),
+          con: Number(bill.line.con),
+          incentiveAmt: Number(bill.line.incentiveAmt),
+          total1: Number(bill.line.total1),
+          esiEmployer: Number(bill.line.esiEmployer),
+          esiEmployee: Number(bill.line.esiEmployee),
+          lwf1: Number(bill.line.lwf1),
+          serviceCharge: Number(bill.line.serviceCharge),
+          lwf2: Number(bill.line.lwf2),
+          total2: Number(bill.line.total2),
+          cgst: Number(bill.line.cgst),
+          sgst: Number(bill.line.sgst),
+          grandTotal: Number(bill.line.grandTotal),
+        },
+      });
+    } catch {
+      toast({ title: "Could not generate the bill", variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      <Link to="/bills" className="inline-flex w-fit items-center gap-1.5 text-sm text-muted hover:text-foreground">
-        <ArrowLeft className="size-4" />
-        Back to Bills
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link to="/bills" className="inline-flex w-fit items-center gap-1.5 text-sm text-muted hover:text-foreground">
+          <ArrowLeft className="size-4" />
+          Back to Bills
+        </Link>
+        {bill?.line ? (
+          <Button onClick={onDownload} disabled={downloading || !company}>
+            <Download className="size-4" />
+            {downloading ? "Preparing…" : "Download (.xlsx)"}
+          </Button>
+        ) : null}
+      </div>
 
       {isLoading || !bill ? (
         <Skeleton className="h-96 w-full max-w-2xl" />
@@ -34,7 +84,7 @@ export function BillDetailPage() {
         <Card className="max-w-2xl">
           <CardContent className="py-6">
             <div className="mb-6 text-center">
-              <p className="font-display text-lg font-semibold">{bill.clientName}</p>
+              <p className="font-display text-lg font-semibold">{bill.client.name}</p>
               <p className="text-sm text-muted">Bill for the month of {monthLabel(bill.month, bill.year)}</p>
               <p className="figure mt-1 text-xs text-muted">
                 Bill No. {bill.billNo} &middot; {new Date(bill.billDate).toLocaleDateString("en-IN")}

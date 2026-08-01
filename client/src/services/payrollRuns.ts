@@ -1,18 +1,30 @@
 import type { PayrollLine, PayrollRun, PayrollType } from "@/types";
-import { payrollRuns, payrollLines, monthOptions } from "./mock/seed";
-import { delay } from "./mock/db";
+import { monthOptions } from "./mock/seed";
+import { api } from "./api";
 
 export { monthOptions };
 
 export async function listPayrollRuns(type?: PayrollType): Promise<PayrollRun[]> {
-  const filtered = type ? payrollRuns.filter((r) => r.type === type) : payrollRuns;
-  return delay([...filtered].sort((a, b) => a.year - b.year || a.month - b.month));
+  return api.get<PayrollRun[]>(`/payroll-runs${type ? `?type=${type}` : ""}`);
 }
 
 export async function getPayrollRun(month: number, year: number, type: PayrollType): Promise<PayrollRun | null> {
-  return delay(payrollRuns.find((r) => r.month === month && r.year === year && r.type === type) ?? null);
+  const runs = await api.get<PayrollRun[]>(`/payroll-runs?type=${type}&month=${month}&year=${year}`);
+  return runs[0] ?? null;
 }
 
 export async function getPayrollLines(runId: string): Promise<PayrollLine[]> {
-  return delay(payrollLines.filter((l) => l.payrollRunId === runId));
+  return api.get<PayrollLine[]>(`/payroll-runs/${runId}/lines`);
+}
+
+export interface SaveContractLineInput {
+  contractWorkerId: string;
+  workingDays: number;
+  otHours: number;
+  advance: number;
+}
+
+/** Full replace — the server recalculates every line from each worker's current basicSalary. */
+export async function saveContractPayrollRun(month: number, year: number, lines: SaveContractLineInput[]): Promise<PayrollRun> {
+  return api.put<PayrollRun>("/payroll-runs/contract", { month, year, lines });
 }

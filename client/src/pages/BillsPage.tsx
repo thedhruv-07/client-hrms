@@ -1,22 +1,83 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { listBills } from "@/services/bills";
+import { listBills, generateBill } from "@/services/bills";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StampBadge } from "@/components/ui/stamp-badge";
+import { Button } from "@/components/ui/button";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { formatCurrencyPrecise } from "@/lib/format";
 import { monthLabel } from "@/lib/date";
+import { usePeriod } from "@/hooks/usePeriod";
+import { toast } from "@/hooks/use-toast";
 
 export function BillsPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { period } = usePeriod();
   const { data: bills, isLoading } = useQuery({ queryKey: ["bills"], queryFn: listBills });
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+
+  const existingBill = (bills ?? []).find((b) => b.month === period.month && b.year === period.year) ?? null;
+  const label = monthLabel(period.month, period.year);
+
+  async function runGenerate() {
+    try {
+      const bill = await generateBill(period.month, period.year);
+      await queryClient.invalidateQueries({ queryKey: ["bills"] });
+      toast({ title: existingBill ? "Bill regenerated" : "Bill generated", description: `Bill No. ${bill.billNo} for ${label}.` });
+    } catch (err) {
+      toast({ title: "Could not generate bill", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    }
+  }
+
+  async function handleRegenerateConfirm() {
+    setRegenerating(true);
+    try {
+      await runGenerate();
+      setConfirmOpen(false);
+    } finally {
+      setRegenerating(false);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Bills</h1>
-        <p className="text-sm text-muted">Client GST bills generated per payroll run</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-semibold">Bills</h1>
+          <p className="text-sm text-muted">Client GST bills generated per payroll run</p>
+        </div>
+        {!isLoading ? (
+          existingBill ? (
+            <Button variant="outline" onClick={() => setConfirmOpen(true)}>
+              Regenerate Bill for {label}
+            </Button>
+          ) : (
+            <Button onClick={runGenerate}>Generate Bill for {label}</Button>
+          )
+        ) : null}
       </div>
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Regenerate Bill No. {existingBill?.billNo}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This recalculates {label}&apos;s bill from the current wage register and overwrites its line items in place — same bill number, fresh
+              numbers. The previous figures are not kept.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={regenerating}>Cancel</AlertDialogCancel>
+            <AlertDialogAction disabled={regenerating} onClick={handleRegenerateConfirm}>
+              {regenerating ? "Regenerating…" : "Regenerate"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="rounded-md border border-border bg-surface">
         <Table>
@@ -44,7 +105,7 @@ export function BillsPage() {
               : (bills ?? []).map((bill) => (
                   <TableRow key={bill.id} className="cursor-pointer" onClick={() => navigate(`/bills/${bill.id}`)}>
                     <TableCell className="figure">{bill.billNo}</TableCell>
-                    <TableCell>{bill.clientName}</TableCell>
+                    <TableCell>{bill.client.name}</TableCell>
                     <TableCell className="figure">{monthLabel(bill.month, bill.year)}</TableCell>
                     <TableCell className="figure">{new Date(bill.billDate).toLocaleDateString("en-IN")}</TableCell>
                     <TableCell className="figure text-right font-medium">{bill.line ? formatCurrencyPrecise(Number(bill.line.grandTotal)) : "—"}</TableCell>
