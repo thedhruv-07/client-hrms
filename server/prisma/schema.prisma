@@ -92,22 +92,26 @@ model ContractWorker {
 }
 
 model InHouseEmployee {
-  id           String       @id @default(cuid())
-  code         String       @unique
-  name         String
-  basicSalary  Decimal      @db.Decimal(12, 2)
-  department   String
-  designation  String
-  joiningDate  DateTime
-  leaveBalance Decimal      @default(0) @db.Decimal(6, 2)
-  bankAccount  String?
-  ifsc         String?
-  pfNo         String?
-  esicNo       String?
-  uan          String?
-  status       WorkerStatus @default(ACTIVE)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id                String       @id @default(cuid())
+  code              String       @unique
+  name              String
+  fatherHusbandName String?
+  basicSalary       Decimal      @db.Decimal(12, 2)
+  department        String
+  designation       String
+  /// Deployment site / client location shown on the payslip, e.g. "OMP India Pvt. Limited".
+  location          String?
+  joiningDate       DateTime
+  leaveBalance      Decimal      @default(0) @db.Decimal(6, 2)
+  paymentMode       String?
+  bankAccount       String?
+  ifsc              String?
+  pfNo              String?
+  esicNo            String?
+  uan               String?
+  status            WorkerStatus @default(ACTIVE)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   payrollLines PayrollLine[]
 }

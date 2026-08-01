@@ -210,12 +210,20 @@ export function EmployeesPage() {
                 </DrawerHeader>
                 <dl className="flex flex-1 flex-col gap-3 text-sm">
                   <div className="flex justify-between">
+                    <dt className="text-muted">Father / Husband Name</dt>
+                    <dd>{selected.fatherHusbandName ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between">
                     <dt className="text-muted">Department</dt>
                     <dd>{selected.department}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted">Designation</dt>
                     <dd>{selected.designation}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">Location</dt>
+                    <dd>{selected.location ?? "—"}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted">Basic Salary</dt>
@@ -234,6 +242,10 @@ export function EmployeesPage() {
                     <dd>
                       <Badge variant={selected.status === "ACTIVE" ? "positive" : "default"}>{selected.status}</Badge>
                     </dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">Payment Mode</dt>
+                    <dd>{selected.paymentMode ?? "—"}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted">Bank Account</dt>

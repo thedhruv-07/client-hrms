@@ -23,7 +23,19 @@ export function InHouseEmployeeForm({ defaultValues, existingCodes, currentCode,
     formState: { errors, isSubmitting },
   } = useForm<InHouseEmployeeFormValues>({
     resolver: zodResolver(inHouseEmployeeSchema),
-    defaultValues: { code: "", name: "", basicSalary: 0, department: "", designation: "", joiningDate: "", leaveBalance: 0, ...defaultValues },
+    defaultValues: {
+      code: "",
+      name: "",
+      fatherHusbandName: "",
+      basicSalary: 0,
+      department: "",
+      designation: "",
+      location: "",
+      joiningDate: "",
+      leaveBalance: 0,
+      paymentMode: "",
+      ...defaultValues,
+    },
   });
 
   async function handleFormSubmit(values: InHouseEmployeeFormValues) {
@@ -104,6 +116,21 @@ export function InHouseEmployeeForm({ defaultValues, existingCodes, currentCode,
         <Input id="uan" className="figure" {...register("uan")} />
       </div>
 
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="fatherHusbandName">Father / Husband Name</Label>
+          <Input id="fatherHusbandName" {...register("fatherHusbandName")} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="location">Location</Label>
+          <Input id="location" placeholder="Deployment site / client" {...register("location")} />
+        </div>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="paymentMode">Payment Mode</Label>
+        <Input id="paymentMode" placeholder="Bank Transfer / Cash" {...register("paymentMode")} />
+      </div>
+
       <div className="mt-2 flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={onCancel}>
           Cancel
@@ -120,11 +147,14 @@ export function inHouseEmployeeToDefaults(employee: InHouseEmployee): InHouseEmp
   return {
     code: employee.code,
     name: employee.name,
+    fatherHusbandName: employee.fatherHusbandName ?? "",
     basicSalary: Number(employee.basicSalary),
     department: employee.department,
     designation: employee.designation,
+    location: employee.location ?? "",
     joiningDate: employee.joiningDate.slice(0, 10),
     leaveBalance: Number(employee.leaveBalance),
+    paymentMode: employee.paymentMode ?? "",
     bankAccount: employee.bankAccount ?? "",
     ifsc: employee.ifsc ?? "",
     pfNo: employee.pfNo ?? "",

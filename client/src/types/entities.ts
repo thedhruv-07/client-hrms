@@ -70,11 +70,15 @@ export interface InHouseEmployee {
   id: string;
   code: string;
   name: string;
+  fatherHusbandName: string | null;
   basicSalary: string;
   department: string;
   designation: string;
+  /** Deployment site / client location shown on the payslip, e.g. "OMP India Pvt. Limited". */
+  location: string | null;
   joiningDate: string;
   leaveBalance: string;
+  paymentMode: string | null;
   bankAccount: string | null;
   ifsc: string | null;
   pfNo: string | null;
