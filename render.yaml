@@ -21,7 +21,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ORIGIN
-        value: https://hrms-client.onrender.com
+        value: https://hrms-client-9cs0.onrender.com
       - key: PORT
         value: 4000
 
@@ -33,7 +33,7 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        value: https://hrms-api.onrender.com
+        value: https://hrms-api-p740.onrender.com
     routes:
       - type: rewrite
         source: /*
