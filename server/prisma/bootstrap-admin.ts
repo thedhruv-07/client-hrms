@@ -7,7 +7,14 @@ import bcrypt from "bcryptjs";
 // touching any other data. Meant for bootstrapping a fresh production
 // database that has no seed data — run once via `npm run bootstrap:admin`
 // with ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME set in the environment.
-const adapter = new PrismaPg({ connectionString: process.env["DATABASE_URL"] });
+const connectionString = process.env["DATABASE_URL"];
+// node-postgres doesn't parse `sslmode=require` out of the connection string
+// itself — Render's external DB URL includes it, but pg silently ignores it
+// and the server closes the connection unless ssl is passed explicitly here.
+const adapter = new PrismaPg({
+  connectionString,
+  ssl: connectionString?.includes("sslmode=require") ? { rejectUnauthorized: false } : undefined,
+});
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
