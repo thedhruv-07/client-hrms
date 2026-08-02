@@ -23,6 +23,7 @@ export const company: Company = {
   name: "Lucky Enterprises",
   address: "Contractor address, to be filled in",
   mobile: null,
+  email: null,
   gstNo: null,
   panNo: null,
   pfCode: null,

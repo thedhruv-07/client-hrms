@@ -22,6 +22,7 @@ export interface BillPdfData {
   companyName: string;
   companyAddress: string;
   companyMobile?: string | null;
+  companyEmail?: string | null;
   companyGstNo?: string | null;
   companyPanNo?: string | null;
   companyPfCode?: string | null;
@@ -113,7 +114,7 @@ function renderDocumentHtml(data: BillPdfData): string {
       <header>
         <h1>${escapeHtml(data.companyName)}</h1>
         <p class="address">${escapeHtml(data.companyAddress)}</p>
-        ${data.companyMobile ? `<p class="contact">Mob. ${escapeHtml(data.companyMobile)}</p>` : ""}
+        ${data.companyMobile || data.companyEmail ? `<p class="contact">${[data.companyMobile ? `Mob. ${escapeHtml(data.companyMobile)}` : "", data.companyEmail ? `Email: ${escapeHtml(data.companyEmail)}` : ""].filter(Boolean).join(" | ")}</p>` : ""}
         <div class="codes">
           ${data.companyGstNo ? `<span>GST No.: ${escapeHtml(data.companyGstNo)}</span>` : ""}
           ${data.companyPanNo ? `<span>PAN No.: ${escapeHtml(data.companyPanNo)}</span>` : ""}

@@ -27,6 +27,7 @@ export interface Company {
   name: string;
   address: string;
   mobile: string | null;
+  email: string | null;
   gstNo: string | null;
   panNo: string | null;
   pfCode: string | null;

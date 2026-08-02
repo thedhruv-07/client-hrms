@@ -94,12 +94,13 @@ billsRouter.get("/:id/pdf", async (req, res) => {
     return;
   }
 
-  const company = (await prisma.company.findFirst()) ?? { name: "", address: "", mobile: null, gstNo: null, panNo: null, pfCode: null, esiCode: null };
+  const company = (await prisma.company.findFirst()) ?? { name: "", address: "", mobile: null, email: null, gstNo: null, panNo: null, pfCode: null, esiCode: null };
 
   const pdf = await generateBillPdf({
     companyName: company.name,
     companyAddress: company.address,
     companyMobile: company.mobile,
+    companyEmail: company.email,
     companyGstNo: company.gstNo,
     companyPanNo: company.panNo,
     companyPfCode: company.pfCode,

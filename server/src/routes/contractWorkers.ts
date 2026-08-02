@@ -125,6 +125,9 @@ function idParam(req: Request): string | undefined {
  *       - in: query
  *         name: clientId
  *         schema: { type: string }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [ACTIVE, INACTIVE] }
  *     responses:
  *       200:
  *         description: Array of contract workers
@@ -136,10 +139,12 @@ function idParam(req: Request): string | undefined {
 contractWorkersRouter.get("/", async (req, res) => {
   const q = queryString(req.query["q"]);
   const clientId = queryString(req.query["clientId"]);
+  const status = queryString(req.query["status"]);
   const workers = await prisma.contractWorker.findMany({
     where: {
       ...(q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { code: { contains: q, mode: "insensitive" } }] } : {}),
       ...(clientId ? { clientId } : {}),
+      ...(status === "ACTIVE" || status === "INACTIVE" ? { status } : {}),
     },
     orderBy: { code: "asc" },
   });
@@ -151,7 +156,12 @@ contractWorkersRouter.get("/", async (req, res) => {
  * /contract-workers/export:
  *   get:
  *     tags: [Contract Workers]
- *     summary: Export all contract workers as CSV
+ *     summary: Export contract workers as CSV, optionally scoped to one client
+ *     parameters:
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string }
+ *         description: When set, exports only that client's workers instead of every worker.
  *     responses:
  *       200:
  *         description: CSV file (code,name,fatherHusbandName,category,designation,clientId,basicSalary,hra,ta,medicalAllow,cea,miscAllow,bankAccount,ifsc,pfNo,esicNo,uan,dob,doj,mobile,aadharNo,address,bankName,status)
@@ -160,8 +170,9 @@ contractWorkersRouter.get("/", async (req, res) => {
  *       401: { description: Missing or invalid token }
  */
 // Registered before "/:id" so "export" isn't captured as an id.
-contractWorkersRouter.get("/export", async (_req, res) => {
-  const workers = await prisma.contractWorker.findMany({ orderBy: { code: "asc" } });
+contractWorkersRouter.get("/export", async (req, res) => {
+  const clientId = queryString(req.query["clientId"]);
+  const workers = await prisma.contractWorker.findMany({ where: clientId ? { clientId } : {}, orderBy: { code: "asc" } });
   const csv = toCsv(
     workers.map((w) => ({
       code: w.code,

@@ -8,6 +8,7 @@ export const salarySlipsRouter = Router();
 salarySlipsRouter.use(requireAuth);
 
 const lineSchema = z.object({ label: z.string(), amount: z.number() });
+const earningLineSchema = z.object({ label: z.string(), rate: z.number(), payable: z.number() });
 
 const attendanceSchema = z.object({
   monthDays: z.number(),
@@ -39,14 +40,14 @@ const slipSchema = z.object({
   esicNo: z.string().nullish(),
   uan: z.string().nullish(),
   attendance: attendanceSchema.optional(),
-  earnings: z.array(lineSchema),
+  earnings: z.array(earningLineSchema),
   deductions: z.array(lineSchema),
   grossEarning: z.number(),
   totalDeduction: z.number(),
   netPayable: z.number(),
 });
 
-const pdfSchema = z.object({ slips: z.array(slipSchema).min(1) });
+const pdfSchema = z.object({ slips: z.array(slipSchema).min(1), slipsPerPage: z.number().int().min(1).max(6).optional() });
 
 /**
  * @openapi
@@ -63,6 +64,7 @@ const pdfSchema = z.object({ slips: z.array(slipSchema).min(1) });
  *             required: [slips]
  *             properties:
  *               slips: { type: array, items: { type: object }, minItems: 1 }
+ *               slipsPerPage: { type: integer, minimum: 1, maximum: 6, description: "Slips stacked per A4 page — defaults to 1 (full-page). Use e.g. 4 for a compact bulk-print layout." }
  *     responses:
  *       200: { description: PDF file, content: { application/pdf: { schema: { type: string, format: binary } } } }
  *       400: { description: Validation error }
@@ -75,7 +77,7 @@ salarySlipsRouter.post("/pdf", async (req, res) => {
     return;
   }
 
-  const pdf = await generateSalarySlipsPdf(parsed.data.slips);
+  const pdf = await generateSalarySlipsPdf(parsed.data.slips, { slipsPerPage: parsed.data.slipsPerPage });
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", 'attachment; filename="salary-slips.pdf"');
   res.send(pdf);

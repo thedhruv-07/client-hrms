@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listContractWorkers } from "@/services/contractWorkers";
 import { getPayrollRun, getPayrollLines, saveContractPayrollRun } from "@/services/payrollRuns";
@@ -6,7 +6,7 @@ import { getCompany } from "@/services/company";
 import { listClients } from "@/services/clients";
 import { listBills } from "@/services/bills";
 import { calculateWageLine, sumWageLines, calculateBill, type WageResult } from "@/lib/calc";
-import { downloadWageRegisterWithBill } from "@/lib/exportExcel";
+import { downloadWageRegisterWithBill, downloadNeftSheet } from "@/lib/exportExcel";
 import { daysInMonth, monthLabel, monthLabelShort } from "@/lib/date";
 import { formatCurrencyPrecise } from "@/lib/format";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableFooter } from "@/components/ui/table";
@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StampBadge } from "@/components/ui/stamp-badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Download, Save } from "lucide-react";
+import { Download, Save, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 interface Row {
@@ -28,6 +28,8 @@ interface Row {
   esicNo: string | null;
   uan: string | null;
   pfNo: string | null;
+  bankAccount: string | null;
+  ifsc: string | null;
   basicSalary: number;
   hra: number;
   ta: number;
@@ -50,7 +52,7 @@ interface Row {
   bonus: number;
 }
 
-type NumericRowKey = keyof Omit<Row, "workerId" | "code" | "name" | "fatherHusbandName" | "category" | "designation" | "esicNo" | "uan" | "pfNo">;
+type NumericRowKey = keyof Omit<Row, "workerId" | "code" | "name" | "fatherHusbandName" | "category" | "designation" | "esicNo" | "uan" | "pfNo" | "bankAccount" | "ifsc">;
 
 /** Per-period manual inputs, in on-screen order — everything except the attendance split (actualPresentDays/weekOffHoliday), which has its own max-days validation and sits first. */
 const EDITABLE_COLUMNS: { key: NumericRowKey; label: string }[] = [
@@ -88,6 +90,16 @@ const DISPLAY_COLUMNS: { key: keyof WageResult; label: string; emphasis?: boolea
   { key: "netPayable", label: "Net Payable", emphasis: true, positive: true },
 ];
 
+const PAGE_SIZE = 15;
+/** Code + Name stay pinned while the many numeric columns scroll horizontally — widths are fixed so the second sticky column's offset is predictable. */
+const CODE_COL_WIDTH = 96;
+const NAME_COL_WIDTH = 160;
+
+/** `table-layout: auto` treats a plain `width` as a hint only — min/max pin it exactly, so the sticky column's declared offset always matches its real rendered edge. */
+function stickyColStyle(width: number, left = 0): CSSProperties {
+  return { left, width, minWidth: width, maxWidth: width };
+}
+
 export function ContractPayrollGrid({ month, year }: { month: number; year: number }) {
   const maxDays = daysInMonth(month, year);
   const queryClient = useQueryClient();
@@ -113,6 +125,12 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
   const [rows, setRows] = useState<Row[] | null>(null);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [neftGenerating, setNeftGenerating] = useState(false);
+  const [page, setPage] = useState(0);
+
+  useEffect(() => {
+    setPage(0);
+  }, [clientId, month, year]);
 
   const isLoading = !clientId || workersQuery.isLoading || runQuery.isLoading || (!!runQuery.data && linesQuery.isLoading);
 
@@ -134,6 +152,8 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
           esicNo: w.esicNo,
           uan: w.uan,
           pfNo: w.pfNo,
+          bankAccount: w.bankAccount,
+          ifsc: w.ifsc,
           basicSalary: Number(w.basicSalary),
           hra: Number(w.hra),
           ta: Number(w.ta),
@@ -166,6 +186,11 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
 
   const computed = useMemo(() => (rows ?? []).map((r) => ({ row: r, result: calculateWageLine({ ...r, monthDays: maxDays }) })), [rows, maxDays]);
   const totals = useMemo(() => sumWageLines((rows ?? []).map((r) => ({ ...r, monthDays: maxDays }))), [rows, maxDays]);
+
+  // Pagination is a display-only slice — totals/save/generate always operate on the full `computed` set.
+  const pageCount = Math.max(1, Math.ceil(computed.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pagedComputed = computed.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   // sumWageLines omits the statutory-deduction totals (they're per-worker-rounded, see wage.ts) —
   // sum the already-rounded per-worker results here instead, for both the on-screen footer and export.
@@ -320,6 +345,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
             name: company.name,
             address: company.address,
             mobile: company.mobile,
+            email: company.email,
             gstNo: company.gstNo,
             pfCode: company.pfCode,
             esiCode: company.esiCode,
@@ -336,6 +362,27 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
       toast({ title: "Could not generate the file", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function onDownloadNeft() {
+    setNeftGenerating(true);
+    try {
+      const payable = computed.filter((c) => c.row.bankAccount && c.row.ifsc);
+      const skipped = computed.length - payable.length;
+      if (payable.length === 0) throw new Error("No workers have both a bank account and IFSC on file.");
+      await downloadNeftSheet(
+        payable.map(({ row, result }) => ({ accountNumber: row.bankAccount!, accountName: row.name, ifsc: row.ifsc!, amount: result.netPayable })),
+        `neft-${clientId ? (clients.find((c) => c.id === clientId)?.name ?? "client").toLowerCase().replace(/\s+/g, "-") : "workers"}-${monthLabel(month, year).toLowerCase()}.xlsx`
+      );
+      toast({
+        title: `NEFT sheet downloaded — ${payable.length} worker(s)`,
+        description: skipped > 0 ? `${skipped} worker(s) skipped — missing bank account or IFSC.` : undefined,
+      });
+    } catch (err) {
+      toast({ title: "Could not generate the NEFT sheet", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setNeftGenerating(false);
     }
   }
 
@@ -415,6 +462,10 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
               {saving ? "Saving…" : "Save"}
             </Button>
           ) : null}
+          <Button variant="outline" onClick={onDownloadNeft} disabled={neftGenerating || isLoading}>
+            <Download className="size-4" />
+            {neftGenerating ? "Preparing…" : "Download Bank NEFT Sheet (.xlsx)"}
+          </Button>
           <Button onClick={onGenerate} disabled={generating || isLoading}>
             <Download className="size-4" />
             {generating ? "Preparing…" : "Download Wage Register + Bill (.xlsx)"}
@@ -425,33 +476,41 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
       {isLoading || !rows ? (
         <Skeleton className="h-96 w-full" />
       ) : (
-        <div className="overflow-x-auto rounded-md border border-border bg-surface">
-          <Table>
+        <div className="rounded-md border border-border bg-surface">
+          <Table containerClassName="max-h-[65vh]">
             <TableHeader>
               <TableRow>
-                <TableHead>Code</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead className="text-right">Present Days</TableHead>
-                <TableHead className="text-right">Week Off/Holiday</TableHead>
+                <TableHead className="sticky left-0 top-0 z-30 bg-surface" style={stickyColStyle(CODE_COL_WIDTH)}>
+                  Code
+                </TableHead>
+                <TableHead className="sticky top-0 z-30 bg-surface" style={stickyColStyle(NAME_COL_WIDTH, CODE_COL_WIDTH)}>
+                  Name
+                </TableHead>
+                <TableHead className="sticky top-0 z-20 bg-surface text-right">Present Days</TableHead>
+                <TableHead className="sticky top-0 z-20 bg-surface text-right">Week Off/Holiday</TableHead>
                 {EDITABLE_COLUMNS.map((c) => (
-                  <TableHead key={c.key} className="text-right">
+                  <TableHead key={c.key} className="sticky top-0 z-20 bg-surface text-right">
                     {c.label}
                   </TableHead>
                 ))}
                 {DISPLAY_COLUMNS.map((c) => (
-                  <TableHead key={c.key} className="text-right">
+                  <TableHead key={c.key} className="sticky top-0 z-20 bg-surface text-right">
                     {c.label}
                   </TableHead>
                 ))}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {computed.map(({ row, result }) => {
+              {pagedComputed.map(({ row, result }) => {
                 const overMax = row.actualPresentDays + row.weekOffHoliday > maxDays;
                 return (
                   <TableRow key={row.workerId}>
-                    <TableCell className="figure">{row.code}</TableCell>
-                    <TableCell>{row.name}</TableCell>
+                    <TableCell className="figure sticky left-0 z-10 bg-surface" style={stickyColStyle(CODE_COL_WIDTH)}>
+                      {row.code}
+                    </TableCell>
+                    <TableCell className="sticky z-10 bg-surface" style={stickyColStyle(NAME_COL_WIDTH, CODE_COL_WIDTH)}>
+                      {row.name}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Input
                         type="number"
@@ -504,7 +563,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
             </TableBody>
             <TableFooter>
               <TableRow>
-                <TableCell colSpan={2 + 2 + EDITABLE_COLUMNS.length}>Totals</TableCell>
+                <TableCell colSpan={2 + 2 + EDITABLE_COLUMNS.length}>Totals (all {computed.length} worker{computed.length === 1 ? "" : "s"})</TableCell>
                 <TableCell className="figure text-right">{formatCurrencyPrecise(totals.basicEarn)}</TableCell>
                 <TableCell className="figure text-right">{formatCurrencyPrecise(totals.hraEarn)}</TableCell>
                 <TableCell className="figure text-right">{formatCurrencyPrecise(totals.taEarn)}</TableCell>
@@ -526,6 +585,27 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
           </Table>
         </div>
       )}
+
+      {!isLoading && rows && computed.length > PAGE_SIZE ? (
+        <div className="flex items-center justify-between text-sm text-muted">
+          <span>
+            Showing {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, computed.length)} of {computed.length} workers
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={safePage === 0}>
+              <ChevronLeft className="size-4" />
+              Previous
+            </Button>
+            <span>
+              Page {safePage + 1} of {pageCount}
+            </span>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} disabled={safePage >= pageCount - 1}>
+              Next
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

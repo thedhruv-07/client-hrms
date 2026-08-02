@@ -6,6 +6,12 @@ export interface SalarySlipLine {
   amount: number;
 }
 
+export interface SalarySlipEarningLine {
+  label: string;
+  rate: number;
+  payable: number;
+}
+
 export interface SalarySlipAttendance {
   monthDays: number;
   present: number;
@@ -36,110 +42,121 @@ export interface SalarySlipData {
   esicNo: string | null;
   uan: string | null;
   attendance: SalarySlipAttendance;
-  earnings: SalarySlipLine[];
+  earnings: SalarySlipEarningLine[];
   deductions: SalarySlipLine[];
   grossEarning: number;
   totalDeduction: number;
   netPayable: number;
 }
 
-function DetailField({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-2 px-3 py-1 text-xs">
-      <span className="text-muted">{label}</span>
-      <span className="figure text-right">{value || "—"}</span>
-    </div>
-  );
+function employeeDetailRows(data: SalarySlipData): string[] {
+  const bankAc = data.bankAccount ? `${data.bankAccount}${data.ifsc ? ` (${data.ifsc})` : ""}` : undefined;
+  const rows: [string, string | null | undefined][] = [
+    ["Employee Code", data.employeeCode],
+    ["Employee Name", data.employeeName],
+    ["Father / Husband", data.fatherHusbandName],
+    ["Department", data.department],
+    ["Designation", data.designation],
+    ["Payment Mode", data.paymentMode],
+    ["A/C No.", bankAc],
+    ["ESI No.", data.esicNo],
+    ["UAN", data.uan],
+    ["Location", data.location],
+  ];
+  return rows.filter(([, value]) => !!value).map(([label, value]) => `${label} : ${value}`);
 }
 
-function AttendanceField({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex justify-between gap-2 px-3 py-1 text-xs">
-      <span className="text-muted">{label}</span>
-      <span className="figure text-right">{value}</span>
-    </div>
-  );
+function attendanceRows(a: SalarySlipAttendance): string[] {
+  return [
+    `Month Days : ${a.monthDays}`,
+    `Present : ${a.present}`,
+    `W.Off : ${a.weekOff}`,
+    `Holiday : ${a.holiday}`,
+    `CL : ${a.cl}`,
+    `SL : ${a.sl}`,
+    `LWP : ${a.lwp}`,
+    `Payable : ${a.payableDays}`,
+    `OT : ${a.otHours}`,
+  ];
 }
 
-/** Visual mirror of server/src/export/salarySlip.ts's HTML template — same content shape, our design system's styling. */
+function deductionRows(lines: SalarySlipLine[]): string[] {
+  return lines.map((l) => `${l.label} : ${formatCurrencyPrecise(l.amount)}`);
+}
+
+/**
+ * Visual mirror of server/src/export/salarySlip.ts's HTML template — one grid where Employee
+ * Details, Attendance, Allowance/Payable, and Deductions run as parallel columns sharing the
+ * same rows, matching the source payslip exactly rather than stacking each as its own block.
+ */
 export function SalarySlip({ data }: { data: SalarySlipData }) {
+  const emp = employeeDetailRows(data);
+  const att = attendanceRows(data.attendance);
+  const ded = deductionRows(data.deductions);
+  const earn = data.earnings;
+  const maxRows = Math.max(emp.length, att.length, earn.length, ded.length);
+  const rows = Array.from({ length: maxRows }, (_, i) => ({ emp: emp[i], att: att[i], earn: earn[i], ded: ded[i] }));
+  const rateTotal = earn.reduce((sum, l) => sum + l.rate, 0);
+
   return (
-    <div className="rounded-md border border-border bg-surface p-6">
+    <div className="rounded-md border border-border bg-surface p-6 text-xs">
       <div className="mb-2 flex justify-between border-b border-border pb-2 text-[11px] text-muted">
         <span>Authorised Signatory</span>
         <span>Employee&apos;s Signature</span>
       </div>
 
-      <div className="mb-4 text-center">
-        <p className="font-display text-xl font-semibold">{data.companyName}</p>
-        <p className="text-xs text-muted">{data.companyAddress}</p>
-        {data.companyGstNo ? <p className="figure text-xs text-muted">GSTIN: {data.companyGstNo}</p> : null}
-        <p className="mt-2 text-sm font-medium uppercase tracking-wide">Pay Slip — {data.monthLabel}</p>
-      </div>
-
-      <div className="mb-3 grid grid-cols-2 gap-x-2 gap-y-0.5 rounded-md border border-border">
-        <DetailField label="Employee Code" value={data.employeeCode} />
-        <DetailField label="Employee Name" value={data.employeeName} />
-        <DetailField label="Father / Husband" value={data.fatherHusbandName ?? ""} />
-        <DetailField label="Department" value={data.department} />
-        <DetailField label="Designation" value={data.designation} />
-        <DetailField label="Location" value={data.location ?? ""} />
-        <DetailField label="Payment Mode" value={data.paymentMode ?? ""} />
-        <DetailField label="Bank A/C" value={data.bankAccount ? `${data.bankAccount}${data.ifsc ? ` (${data.ifsc})` : ""}` : ""} />
-        <DetailField label="PF No." value={data.pfNo ?? ""} />
-        <DetailField label="ESIC No." value={data.esicNo ?? ""} />
-        <DetailField label="UAN" value={data.uan ?? ""} />
-      </div>
-
-      <div className="mb-4 rounded-md border border-border">
-        <div className="border-b border-border bg-border/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide">Attendance</div>
-        <div className="grid grid-cols-3">
-          <AttendanceField label="Month Days" value={data.attendance.monthDays} />
-          <AttendanceField label="Present" value={data.attendance.present} />
-          <AttendanceField label="W. Off" value={data.attendance.weekOff} />
-          <AttendanceField label="Holiday" value={data.attendance.holiday} />
-          <AttendanceField label="CL" value={data.attendance.cl} />
-          <AttendanceField label="SL" value={data.attendance.sl} />
-          <AttendanceField label="LWP" value={data.attendance.lwp} />
-          <AttendanceField label="Payable" value={data.attendance.payableDays} />
-          <AttendanceField label="OT (hrs)" value={data.attendance.otHours} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="rounded-md border border-border">
-          <div className="border-b border-border bg-border/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide">Allowance</div>
-          {data.earnings.map((l) => (
-            <div key={l.label} className="flex justify-between border-b border-border px-3 py-1.5 text-sm last:border-0">
-              <span className="text-muted">{l.label}</span>
-              <span className="figure">{formatCurrencyPrecise(l.amount)}</span>
-            </div>
-          ))}
-          <div className="flex justify-between px-3 py-1.5 text-sm font-semibold">
-            <span>Total</span>
-            <span className="figure">{formatCurrencyPrecise(data.grossEarning)}</span>
+      <div className="mb-3 text-center">
+        <div className="relative flex items-start justify-center">
+          <div>
+            <p className="font-display text-xl font-semibold">{data.companyName}</p>
+            <p className="text-xs text-muted">{data.companyAddress}</p>
+            {data.companyGstNo ? <p className="figure text-xs text-muted">GSTIN: {data.companyGstNo}</p> : null}
           </div>
+          <span className="absolute right-0 top-0 rounded-sm border border-border px-1.5 py-0.5 text-xs font-semibold">Pay Slip</span>
         </div>
-        <div className="rounded-md border border-border">
-          <div className="border-b border-border bg-border/20 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide">Deductions</div>
-          {data.deductions.map((l) => (
-            <div key={l.label} className="flex justify-between border-b border-border px-3 py-1.5 text-sm last:border-0">
-              <span className="text-muted">{l.label}</span>
-              <span className="figure">{formatCurrencyPrecise(l.amount)}</span>
-            </div>
-          ))}
-          <div className="flex justify-between px-3 py-1.5 text-sm font-semibold">
-            <span>Total</span>
-            <span className="figure">{formatCurrencyPrecise(data.totalDeduction)}</span>
-          </div>
-        </div>
+        <p className="mt-2 text-right text-sm font-medium tracking-wide">Payslip For The Month Of : {data.monthLabel}</p>
       </div>
 
-      <div className="mt-4 flex items-center justify-between rounded-sm border-2 border-foreground/60 px-3 py-2.5 text-base font-semibold">
-        <span>Net Salary</span>
-        <span className="figure">{formatCurrencyPrecise(data.netPayable)}</span>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] border-collapse rounded-md border border-border">
+          <thead>
+            <tr className="bg-border/20 text-left text-[10px] font-semibold uppercase tracking-wide">
+              <th className="border border-border px-2 py-1">Employee Details</th>
+              <th className="border border-border px-2 py-1">Attendance</th>
+              <th className="border border-border px-2 py-1" colSpan={2}>
+                Allowance
+              </th>
+              <th className="border border-border px-2 py-1 text-right">Payable</th>
+              <th className="border border-border px-2 py-1">Deductions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td className="figure whitespace-nowrap border border-border px-2 py-1">{r.emp ?? ""}</td>
+                <td className="figure whitespace-nowrap border border-border px-2 py-1">{r.att ?? ""}</td>
+                <td className="whitespace-nowrap border border-border px-2 py-1">{r.earn?.label ?? ""}</td>
+                <td className="figure whitespace-nowrap border border-border px-2 py-1 text-right">{r.earn ? formatCurrencyPrecise(r.earn.rate) : ""}</td>
+                <td className="figure whitespace-nowrap border border-border px-2 py-1 text-right">{r.earn ? formatCurrencyPrecise(r.earn.payable) : ""}</td>
+                <td className="figure whitespace-nowrap border border-border px-2 py-1">{r.ded ?? ""}</td>
+              </tr>
+            ))}
+            <tr className="font-semibold">
+              <td className="border border-border px-2 py-1" />
+              <td className="border border-border px-2 py-1" />
+              <td className="border border-border px-2 py-1">Total :</td>
+              <td className="figure border border-border px-2 py-1 text-right">{formatCurrencyPrecise(rateTotal)}</td>
+              <td className="figure border border-border px-2 py-1 text-right">{formatCurrencyPrecise(data.grossEarning)}</td>
+              <td className="figure border border-border px-2 py-1 text-right">{formatCurrencyPrecise(data.totalDeduction)}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-      <p className="mt-1.5 text-right text-xs italic text-muted">{amountInWords(data.netPayable)}</p>
+
+      <div className="mt-4 flex items-baseline justify-between gap-4 rounded-sm border-2 border-foreground/60 px-3 py-2.5 text-base font-semibold">
+        <span>NET SALARY : {formatCurrencyPrecise(data.netPayable)}</span>
+        <span className="figure text-xs font-normal italic text-muted">{amountInWords(data.netPayable)}</span>
+      </div>
 
       <div className="mt-4 flex justify-between border-t border-border pt-2 text-[11px] text-muted">
         <span>Authorised Signatory</span>

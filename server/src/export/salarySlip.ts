@@ -5,6 +5,13 @@ export interface SalarySlipLine {
   amount: number;
 }
 
+/** Allowance rows show the flat monthly rate alongside the attendance-prorated payable amount, matching the source payslip's two-column layout. */
+export interface SalarySlipEarningLine {
+  label: string;
+  rate: number;
+  payable: number;
+}
+
 export interface SalarySlipAttendance {
   monthDays: number;
   present: number;
@@ -37,7 +44,7 @@ export interface SalarySlipData {
   esicNo?: string | null;
   uan?: string | null;
   attendance?: SalarySlipAttendance;
-  earnings: SalarySlipLine[];
+  earnings: SalarySlipEarningLine[];
   deductions: SalarySlipLine[];
   grossEarning: number;
   totalDeduction: number;
@@ -88,74 +95,105 @@ function amountInWords(amount: number): string {
   return `Rupees ${parts.join(" ")} Only.`;
 }
 
-function renderLineRows(lines: SalarySlipLine[]): string {
-  return lines.map((l) => `<tr><td>${escapeHtml(l.label)}</td><td class="amount">${formatAmount(l.amount)}</td></tr>`).join("");
-}
-
-function detailRow(label: string, value: string | null | undefined): string {
-  if (!value) return "";
-  return `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`;
-}
-
-function renderAttendance(a: SalarySlipAttendance | undefined): string {
-  if (!a) return "";
-  const cell = (label: string, value: number) => `<div class="a-cell"><span class="a-label">${label}</span><span class="a-value">${value}</span></div>`;
-  return `
-    <div class="attendance">
-      <div class="section-title">Attendance</div>
-      <div class="a-grid">
-        ${cell("Month Days", a.monthDays)}${cell("Present", a.present)}${cell("W. Off", a.weekOff)}
-        ${cell("Holiday", a.holiday)}${cell("CL", a.cl)}${cell("SL", a.sl)}
-        ${cell("LWP", a.lwp)}${cell("Payable", a.payableDays)}${cell("OT (hrs)", a.otHours)}
-      </div>
-    </div>
-  `;
-}
-
-function renderSlipSection(data: SalarySlipData, isLast: boolean): string {
+/** "Label : value" combined text, one per populated field — matches the source payslip's inline-colon style. Blank fields are skipped entirely. */
+function employeeDetailRows(data: SalarySlipData): string[] {
   const bankAc = data.bankAccount ? `${data.bankAccount}${data.ifsc ? ` (${data.ifsc})` : ""}` : undefined;
+  const rows: [string, string | null | undefined][] = [
+    ["Employee Code", data.employeeCode],
+    ["Employee Name", data.employeeName],
+    ["Father / Husband", data.fatherHusbandName],
+    ["Department", data.department],
+    ["Designation", data.designation],
+    ["Payment Mode", data.paymentMode],
+    ["A/C No.", bankAc],
+    ["ESI No.", data.esicNo],
+    ["UAN", data.uan],
+    ["Location", data.location],
+  ];
+  return rows.filter(([, value]) => !!value).map(([label, value]) => `${escapeHtml(label)} : ${escapeHtml(value!)}`);
+}
+
+function attendanceRows(a: SalarySlipAttendance | undefined): string[] {
+  if (!a) return [];
+  return [
+    `Month Days : ${a.monthDays}`,
+    `Present : ${a.present}`,
+    `W.Off : ${a.weekOff}`,
+    `Holiday : ${a.holiday}`,
+    `CL : ${a.cl}`,
+    `SL : ${a.sl}`,
+    `LWP : ${a.lwp}`,
+    `Payable : ${a.payableDays}`,
+    `OT : ${a.otHours}`,
+  ];
+}
+
+function deductionRows(lines: SalarySlipLine[]): string[] {
+  return lines.map((l) => `${escapeHtml(l.label)} : ${formatAmount(l.amount)}`);
+}
+
+/**
+ * The source payslip is one grid — Employee Details, Attendance, Allowance/Payable, and
+ * Deductions all run as parallel columns sharing the same rows, not stacked sections.
+ * Every row is always shown (no zero-hiding) in both full-page and compact mode; only the
+ * font size changes between them via the ".compact" CSS variables.
+ */
+function renderSlipSection(data: SalarySlipData, compact: boolean): string {
+  const emp = employeeDetailRows(data);
+  const att = attendanceRows(data.attendance);
+  const ded = deductionRows(data.deductions);
+  const earn = data.earnings;
+  const maxRows = Math.max(emp.length, att.length, earn.length, ded.length);
+
+  const bodyRows: string[] = [];
+  for (let i = 0; i < maxRows; i++) {
+    const e = earn[i];
+    bodyRows.push(
+      `<tr><td>${emp[i] ?? ""}</td><td>${att[i] ?? ""}</td><td>${e ? escapeHtml(e.label) : ""}</td>` +
+        `<td class="amount">${e ? formatAmount(e.rate) : ""}</td><td class="amount">${e ? formatAmount(e.payable) : ""}</td>` +
+        `<td>${ded[i] ?? ""}</td></tr>`
+    );
+  }
+  const rateTotal = earn.reduce((sum, l) => sum + l.rate, 0);
+  bodyRows.push(
+    `<tr class="totals"><td></td><td></td><td>Total :</td><td class="amount">${formatAmount(rateTotal)}</td>` +
+      `<td class="amount">${formatAmount(data.grossEarning)}</td><td class="amount">${formatAmount(data.totalDeduction)}</td></tr>`
+  );
+
+  const sigRowTop = compact
+    ? ""
+    : `<div class="sig-row"><span>Authorised Signatory</span><span>Employee's Signature</span></div>`;
+
   return `
-    <section class="slip"${isLast ? "" : ' style="page-break-after: always;"'}>
-      <div class="sig-row">
-        <span>Authorised Signatory</span>
-        <span>Employee's Signature</span>
-      </div>
+    <section class="slip">
+      ${sigRowTop}
       <header>
-        <h1>${escapeHtml(data.companyName)}</h1>
-        <p class="address">${escapeHtml(data.companyAddress)}</p>
-        ${data.companyGstNo ? `<p class="gst">GSTIN: ${escapeHtml(data.companyGstNo)}</p>` : ""}
-        <h2>PAY SLIP — ${escapeHtml(data.monthLabel.toUpperCase())}</h2>
+        <div class="header-top">
+          <div>
+            <h1>${escapeHtml(data.companyName)}</h1>
+            <p class="address">${escapeHtml(data.companyAddress)}</p>
+            ${data.companyGstNo ? `<p class="gst">GSTIN: ${escapeHtml(data.companyGstNo)}</p>` : ""}
+          </div>
+          <span class="payslip-tag">Pay Slip</span>
+        </div>
+        <h2>Payslip For The Month Of : ${escapeHtml(data.monthLabel)}</h2>
       </header>
-      <table class="employee">
-        ${detailRow("Employee Code", data.employeeCode)}
-        ${detailRow("Employee Name", data.employeeName)}
-        ${detailRow("Father / Husband", data.fatherHusbandName)}
-        ${detailRow("Department", data.department)}
-        ${detailRow("Designation", data.designation)}
-        ${detailRow("Location", data.location)}
-        ${detailRow("Payment Mode", data.paymentMode)}
-        ${detailRow("Bank A/C", bankAc)}
-        ${detailRow("PF No.", data.pfNo)}
-        ${detailRow("ESIC No.", data.esicNo)}
-        ${detailRow("UAN", data.uan)}
+      <table class="grid">
+        <thead>
+          <tr>
+            <th>Employee Details</th>
+            <th>Attendance</th>
+            <th colspan="2">Allowance</th>
+            <th class="amount">Payable</th>
+            <th>Deductions</th>
+          </tr>
+        </thead>
+        <tbody>${bodyRows.join("")}</tbody>
       </table>
-      ${renderAttendance(data.attendance)}
-      <div class="columns">
-        <table class="lines">
-          <thead><tr><th colspan="2">Allowance</th></tr></thead>
-          <tbody>${renderLineRows(data.earnings)}</tbody>
-          <tfoot><tr><td>Total</td><td class="amount">${formatAmount(data.grossEarning)}</td></tr></tfoot>
-        </table>
-        <table class="lines">
-          <thead><tr><th colspan="2">Deductions</th></tr></thead>
-          <tbody>${renderLineRows(data.deductions)}</tbody>
-          <tfoot><tr><td>Total</td><td class="amount">${formatAmount(data.totalDeduction)}</td></tr></tfoot>
-        </table>
+      <div class="net-row">
+        <span>NET SALARY : ${formatAmount(data.netPayable)}</span>
+        <span class="words-inline">${escapeHtml(amountInWords(data.netPayable))}</span>
       </div>
-      <table class="net">
-        <tr><td>Net Salary</td><td class="amount">${formatAmount(data.netPayable)}</td></tr>
-      </table>
-      <p class="words">${escapeHtml(amountInWords(data.netPayable))}</p>
       <div class="sig-row sig-row-footer">
         <span>Authorised Signatory</span>
         <span>Employee's Signature</span>
@@ -164,45 +202,80 @@ function renderSlipSection(data: SalarySlipData, isLast: boolean): string {
   `;
 }
 
+// Sizes are CSS variables so ".compact" (N slips stacked on one A4 page) can override
+// them all at once instead of duplicating every rule at two font scales.
 const STYLES = `
   * { box-sizing: border-box; }
   html { color-scheme: light; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #111; background: #fff; margin: 0; }
-  .slip { padding: 32px; }
-  .sig-row { display: flex; justify-content: space-between; font-size: 10px; color: #666; border-bottom: 1px solid #ddd; padding-bottom: 6px; margin-bottom: 12px; }
-  .sig-row-footer { border-bottom: none; border-top: 1px solid #ddd; margin-top: 16px; padding-top: 6px; margin-bottom: 0; }
-  header { text-align: center; margin-bottom: 16px; }
-  h1 { margin: 0; font-size: 22px; font-weight: bold; }
-  h2 { margin: 6px 0 0; font-size: 13px; font-weight: bold; letter-spacing: 0.5px; }
-  .address { margin: 2px 0 0; font-size: 10px; color: #444; }
-  .gst { margin: 2px 0 0; font-size: 10px; color: #444; }
+  @page { size: A4; margin: 0; }
+  :root {
+    --pad: 32px; --gap-sm: 4px; --gap-md: 8px; --gap-lg: 16px;
+    --fs-h1: 22px; --fs-h2: 13px; --fs-sub: 10px; --fs-body: 11px; --fs-net: 15px;
+    --row-pad: 4px 8px; --cell-pad: 5px 8px;
+  }
+  .page.compact {
+    --pad: 5mm; --gap-sm: 2px; --gap-md: 4px; --gap-lg: 6px;
+    --fs-h1: 15px; --fs-h2: 9.5px; --fs-sub: 7.5px; --fs-body: 8px; --fs-net: 11px;
+    --row-pad: 1.5px 5px; --cell-pad: 2px 5px;
+  }
+  body { font-family: Arial, Helvetica, sans-serif; color: #111; background: #fff; margin: 0; line-height: 1.05; }
+  .page.compact { line-height: 1; }
+  .page { width: 210mm; }
+  .page.compact { height: 297mm; display: flex; flex-direction: column; }
+  .slip { padding: var(--pad); font-size: var(--fs-body); }
+  .page.compact .slip { flex: 1 1 0; min-height: 0; overflow: hidden; border-bottom: 1px dashed #999; }
+  .page.compact .slip:last-child { border-bottom: none; }
+  .sig-row { display: flex; justify-content: space-between; font-size: var(--fs-sub); color: #666; border-bottom: 1px solid #ddd; padding-bottom: var(--gap-sm); margin-bottom: var(--gap-md); }
+  .sig-row-footer { border-bottom: none; border-top: 1px solid #ddd; margin-top: var(--gap-lg); padding-top: var(--gap-sm); margin-bottom: 0; }
+  header { text-align: center; margin-bottom: var(--gap-md); }
+  .header-top { display: flex; justify-content: center; align-items: flex-start; position: relative; }
+  .payslip-tag { position: absolute; right: 0; top: 0; font-size: var(--fs-sub); font-weight: bold; border: 1px solid #999; border-radius: 2px; padding: 0 4px; }
+  h1 { margin: 0; font-size: var(--fs-h1); font-weight: bold; }
+  h2 { margin: var(--gap-sm) 0 0; font-size: var(--fs-h2); font-weight: bold; letter-spacing: 0.5px; text-align: right; }
+  .address { margin: 1px 0 0; font-size: var(--fs-sub); color: #444; }
+  .gst { margin: 1px 0 0; font-size: var(--fs-sub); color: #444; }
   table { width: 100%; border-collapse: collapse; }
-  table.employee { margin-bottom: 14px; }
-  table.employee td { padding: 4px 8px; font-size: 11px; border-bottom: 1px solid #eee; }
-  table.employee td:first-child { color: #555; width: 140px; }
-  .section-title { font-weight: bold; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; background: #efece4; padding: 5px 8px; border: 1px solid #ddd; border-bottom: none; }
-  .attendance { margin-bottom: 14px; }
-  .a-grid { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid #ddd; }
-  .a-cell { display: flex; justify-content: space-between; padding: 5px 8px; font-size: 11px; border-bottom: 1px solid #eee; }
-  .a-label { color: #555; }
-  .columns { display: flex; gap: 16px; margin-top: 4px; }
-  table.lines { border: 1px solid #ccc; }
-  table.lines th { background: #efece4; text-align: left; padding: 6px 8px; border-bottom: 1px solid #ccc; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
-  table.lines td { padding: 5px 8px; border-bottom: 1px solid #eee; font-size: 11px; }
-  table.lines tfoot td { font-weight: bold; border-top: 1px solid #ccc; border-bottom: none; }
+  table.grid { border: 1px solid #999; }
+  table.grid th { background: #efece4; text-align: left; padding: var(--cell-pad); border: 1px solid #999; font-size: var(--fs-sub); text-transform: uppercase; letter-spacing: 0.5px; }
+  table.grid th.amount { text-align: right; }
+  table.grid td { padding: var(--row-pad); border-right: 1px solid #ddd; border-bottom: 1px solid #eee; font-size: var(--fs-body); white-space: nowrap; }
+  table.grid td:last-child { border-right: none; }
+  table.grid tr.totals td { font-weight: bold; border-top: 1px solid #999; }
+  table.grid td:nth-child(1) { width: 27%; }
+  table.grid td:nth-child(2) { width: 18%; }
+  table.grid td:nth-child(3) { width: 11%; }
+  table.grid td:nth-child(4), table.grid td:nth-child(5) { width: 9%; }
+  table.grid td:nth-child(6) { width: 18%; }
   .amount { text-align: right; font-variant-numeric: tabular-nums; }
-  table.net { margin-top: 16px; border: 2px solid #333; }
-  table.net td { padding: 8px; font-weight: bold; font-size: 15px; }
-  .words { text-align: right; font-size: 10px; font-style: italic; color: #555; margin: 4px 0 0; }
+  .net-row { display: flex; justify-content: space-between; align-items: baseline; gap: var(--gap-md); margin-top: var(--gap-md); border: 2px solid #333; padding: var(--gap-sm) var(--gap-md); font-weight: bold; font-size: var(--fs-net); }
+  .words-inline { font-weight: normal; font-style: italic; font-size: var(--fs-sub); color: #555; white-space: nowrap; }
 `;
 
-function renderDocumentHtml(slips: SalarySlipData[]): string {
-  const body = slips.map((s, i) => renderSlipSection(s, i === slips.length - 1)).join("");
+function chunk<T>(items: T[], size: number): T[][] {
+  const pages: T[][] = [];
+  for (let i = 0; i < items.length; i += size) pages.push(items.slice(i, i + size));
+  return pages;
+}
+
+function renderDocumentHtml(slips: SalarySlipData[], slipsPerPage: number): string {
+  const compact = slipsPerPage > 1;
+  const pages = chunk(slips, slipsPerPage);
+  const pageClass = compact ? "page compact" : "page";
+  const body = pages
+    .map(
+      (page, i) =>
+        `<div class="${pageClass}"${i === pages.length - 1 ? "" : ' style="page-break-after: always;"'}>${page.map((s) => renderSlipSection(s, compact)).join("")}</div>`
+    )
+    .join("");
   return `<!doctype html><html><head><meta charset="utf-8"><style>${STYLES}</style></head><body>${body}</body></html>`;
 }
 
-/** One PDF, one page per slip (page-break-after between sections) — used for both a single slip and a batch download. */
-export async function generateSalarySlipsPdf(slips: SalarySlipData[]): Promise<Buffer> {
+/**
+ * One PDF, `slipsPerPage` slips stacked per A4 page (default 1 — one slip, one page).
+ * Used for single-slip downloads, one-per-page batches, and the compact bulk-print layout.
+ */
+export async function generateSalarySlipsPdf(slips: SalarySlipData[], options?: { slipsPerPage?: number }): Promise<Buffer> {
   if (slips.length === 0) throw new Error("generateSalarySlipsPdf requires at least one slip");
-  return renderHtmlToPdf(renderDocumentHtml(slips));
+  const slipsPerPage = Math.max(1, Math.floor(options?.slipsPerPage ?? 1));
+  return renderHtmlToPdf(renderDocumentHtml(slips, slipsPerPage));
 }

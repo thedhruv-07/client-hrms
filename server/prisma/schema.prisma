@@ -48,6 +48,7 @@ model Company {
   name        String
   address     String
   mobile      String?
+  email       String?
   gstNo       String?
   panNo       String?
   pfCode      String?

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { flexRender, getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef, type SortingState } from "@tanstack/react-table";
-import { Plus, Search, ArrowUpDown, Upload } from "lucide-react";
+import { Plus, Search, ArrowUpDown, Upload, Download } from "lucide-react";
 import { listContractWorkers, createContractWorker, updateContractWorker, deactivateContractWorker, importContractWorkers } from "@/services/contractWorkers";
 import { listClients } from "@/services/clients";
 import type { ContractWorker } from "@/types";
@@ -20,11 +20,13 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrencyPrecise } from "@/lib/format";
 import { parseWorkerWorkbook } from "@/lib/workerImport";
+import { downloadWorkerDetailsSheet } from "@/lib/exportExcel";
 
 export function WorkersPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [clientFilter, setClientFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sorting, setSorting] = useState<SortingState>([{ id: "code", desc: false }]);
   const [addOpen, setAddOpen] = useState(false);
   const [selected, setSelected] = useState<ContractWorker | null>(null);
@@ -32,6 +34,7 @@ export function WorkersPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importClientId, setImportClientId] = useState<string>("");
   const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -41,8 +44,13 @@ export function WorkersPage() {
   });
 
   const { data: workers, isLoading } = useQuery({
-    queryKey: ["contract-workers", search, clientFilter],
-    queryFn: () => listContractWorkers(search || undefined, clientFilter === "all" ? undefined : clientFilter),
+    queryKey: ["contract-workers", search, clientFilter, statusFilter],
+    queryFn: () =>
+      listContractWorkers(
+        search || undefined,
+        clientFilter === "all" ? undefined : clientFilter,
+        statusFilter === "all" ? undefined : (statusFilter as "ACTIVE" | "INACTIVE")
+      ),
   });
 
   const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: listClients });
@@ -76,6 +84,48 @@ export function WorkersPage() {
     } finally {
       setImporting(false);
       if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  async function handleExportDetails() {
+    if (!workers || workers.length === 0) return;
+    setExporting(true);
+    try {
+      const scope = clientFilter === "all" ? "all" : clientName(clientFilter).toLowerCase().replace(/\s+/g, "-");
+      await downloadWorkerDetailsSheet(
+        workers.map((w) => ({
+          code: w.code,
+          name: w.name,
+          fatherHusbandName: w.fatherHusbandName,
+          category: w.category,
+          designation: w.designation,
+          clientName: clientName(w.clientId),
+          basicSalary: Number(w.basicSalary),
+          hra: Number(w.hra),
+          ta: Number(w.ta),
+          medicalAllow: Number(w.medicalAllow),
+          cea: Number(w.cea),
+          miscAllow: Number(w.miscAllow),
+          bankAccount: w.bankAccount,
+          ifsc: w.ifsc,
+          bankName: w.bankName,
+          pfNo: w.pfNo,
+          esicNo: w.esicNo,
+          uan: w.uan,
+          dob: w.dob ? w.dob.slice(0, 10) : null,
+          doj: w.doj ? w.doj.slice(0, 10) : null,
+          mobile: w.mobile,
+          aadharNo: w.aadharNo,
+          address: w.address,
+          status: w.status,
+        })),
+        `contract-workers-${scope}.xlsx`
+      );
+      toast({ title: "Worker details downloaded" });
+    } catch (err) {
+      toast({ title: "Could not export worker details", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -165,6 +215,20 @@ export function WorkersPage() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="All Statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="ACTIVE">Active</SelectItem>
+            <SelectItem value="INACTIVE">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="outline" onClick={handleExportDetails} disabled={exporting || isLoading || (workers ?? []).length === 0}>
+          <Download className="size-4" />
+          {exporting ? "Preparing…" : clientFilter === "all" ? "Download All Details" : "Download Details"}
+        </Button>
       </div>
 
       <div className="rounded-md border border-border bg-surface">

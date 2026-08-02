@@ -13,9 +13,8 @@ export function getNavItems(module: PayrollType): NavItem[] {
     { label: module === "CONTRACT" ? "Workers" : "Employees", to: module === "CONTRACT" ? "/workers" : "/employees", icon: Users },
     ...(module === "CONTRACT" ? [{ label: "Clients", to: "/clients", icon: Building2 }] : []),
     { label: "Payroll Runs", to: "/payroll-runs", icon: ClipboardList },
-    module === "CONTRACT"
-      ? { label: "Bills", to: "/bills", icon: Receipt }
-      : { label: "Salary Slips", to: "/salary-slips", icon: FileText },
+    ...(module === "CONTRACT" ? [{ label: "Bills", to: "/bills", icon: Receipt }] : []),
+    { label: "Salary Slips", to: "/salary-slips", icon: FileText },
     { label: "Reports", to: "/reports", icon: BarChart3 },
     { label: "Settings", to: "/settings", icon: Settings },
   ];

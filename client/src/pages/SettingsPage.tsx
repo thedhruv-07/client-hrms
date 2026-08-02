@@ -19,6 +19,7 @@ const companySchema = z.object({
   name: z.string().min(1, "Company name is required"),
   address: z.string().min(1, "Address is required"),
   mobile: z.string().optional(),
+  email: z.union([z.string().email("Enter a valid email"), z.literal("")]).optional(),
   gstNo: z.string().optional(),
   panNo: z.string().optional(),
   pfCode: z.string().optional(),
@@ -47,6 +48,7 @@ function CompanySettingsForm() {
         name: companyData.name,
         address: companyData.address,
         mobile: companyData.mobile ?? "",
+        email: companyData.email ?? "",
         gstNo: companyData.gstNo ?? "",
         panNo: companyData.panNo ?? "",
         pfCode: companyData.pfCode ?? "",
@@ -78,6 +80,10 @@ function CompanySettingsForm() {
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="mobile">Mobile</Label>
           <Input id="mobile" className="figure" {...register("mobile")} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" type="email" {...register("email")} />
         </div>
       </div>
       <div className="flex flex-col gap-1.5">

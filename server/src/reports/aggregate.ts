@@ -12,3 +12,4 @@ export function groupSumBy<T>(items: T[], keyOf: (item: T) => string, pick: (ite
   }
   return result;
 }
+

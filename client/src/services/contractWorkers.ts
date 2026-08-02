@@ -38,10 +38,11 @@ export async function importContractWorkers(csv: string): Promise<ImportResult> 
   return api.post<ImportResult>("/contract-workers/import", { csv });
 }
 
-export async function listContractWorkers(q?: string, clientId?: string): Promise<ContractWorker[]> {
+export async function listContractWorkers(q?: string, clientId?: string, status?: ContractWorker["status"]): Promise<ContractWorker[]> {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (clientId) params.set("clientId", clientId);
+  if (status) params.set("status", status);
   const qs = params.toString();
   return api.get<ContractWorker[]>(`/contract-workers${qs ? `?${qs}` : ""}`);
 }

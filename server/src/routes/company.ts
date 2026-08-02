@@ -12,6 +12,7 @@ export const updateSchema = z.object({
   name: z.string().min(1),
   address: z.string().min(1),
   mobile: z.string().optional(),
+  email: z.string().email().or(z.literal("")).optional(),
   gstNo: z.string().optional(),
   panNo: z.string().optional(),
   pfCode: z.string().optional(),
@@ -60,6 +61,7 @@ companyRouter.get("/", async (_req, res) => {
  *               name: { type: string }
  *               address: { type: string }
  *               mobile: { type: string }
+ *               email: { type: string }
  *               gstNo: { type: string }
  *               panNo: { type: string }
  *               pfCode: { type: string }

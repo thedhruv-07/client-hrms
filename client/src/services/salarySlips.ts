@@ -27,3 +27,9 @@ export async function downloadSalarySlipsPdfBatch(slips: SalarySlipExportData[],
   const blob = await api.postBlob("/salary-slips/pdf", { slips: slips.map(toServerSlip) });
   downloadBlob(blob, `salary-slips-${monthLabel.toLowerCase()}.pdf`);
 }
+
+/** Compact layout — `slipsPerPage` slips stacked on each A4 sheet, for paper-saving bulk printing. */
+export async function downloadSalarySlipsPdfCompact(slips: SalarySlipExportData[], monthLabel: string, slipsPerPage = 4): Promise<void> {
+  const blob = await api.postBlob("/salary-slips/pdf", { slips: slips.map(toServerSlip), slipsPerPage });
+  downloadBlob(blob, `salary-slips-compact-${monthLabel.toLowerCase()}.pdf`);
+}

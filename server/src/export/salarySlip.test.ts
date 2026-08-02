@@ -9,8 +9,8 @@ const ARUN: SalarySlipData = {
   employeeName: "Arun",
   employeeCode: "CW-001",
   earnings: [
-    { label: "Basic Earn", amount: 13033.33 },
-    { label: "OT Amount", amount: 4108.33 },
+    { label: "Basic Earn", rate: 15000, payable: 13033.33 },
+    { label: "OT Amount", rate: 0, payable: 4108.33 },
   ],
   deductions: [
     { label: "ESIC", amount: 128.56 },
@@ -49,4 +49,11 @@ test("batch of slips produces one page per slip", async () => {
 
 test("rejects an empty slip list instead of launching a browser for nothing", async () => {
   await assert.rejects(() => generateSalarySlipsPdf([]));
+});
+
+test("slipsPerPage groups N slips onto each page instead of one page per slip", async () => {
+  const slips = Array.from({ length: 5 }, (_, i) => ({ ...ARUN, employeeCode: `CW-${i}` }));
+  const pdf = await generateSalarySlipsPdf(slips, { slipsPerPage: 4 });
+  // 5 slips at 4/page -> 2 pages (4 + 1), not 5.
+  assert.equal(pageCount(pdf), 2);
 });

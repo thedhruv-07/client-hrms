@@ -622,7 +622,7 @@ export interface SalarySlipExportData {
   esicNo: string | null;
   uan: string | null;
   attendance: SalarySlipAttendance;
-  earnings: { label: string; amount: number }[];
+  earnings: { label: string; rate: number; payable: number }[];
   deductions: { label: string; amount: number }[];
   grossEarning: number;
   totalDeduction: number;
@@ -641,13 +641,6 @@ function addMergedRow(sheet: ExcelJS.Worksheet, text: string, opts: { bold?: boo
   return row;
 }
 
-/** A label:value pair — label left-aligned/muted, value left-aligned (never right — right-aligning a value next to a non-blank label risks Excel clipping its leading characters when the value overflows). */
-function labelValueCell(row: ExcelJS.Row, labelCol: number, valueCol: number, label: string, value: string | number) {
-  row.getCell(labelCol).value = label;
-  row.getCell(labelCol).font = { color: MUTED_GREY, size: 10 };
-  row.getCell(valueCol).value = value;
-}
-
 function writeSlipSheet(sheet: ExcelJS.Worksheet, slip: SalarySlipExportData) {
   sheet.columns = [{ width: 16 }, { width: 22 }, { width: 14 }, { width: 20 }, { width: 12 }, { width: 12 }];
 
@@ -661,74 +654,68 @@ function writeSlipSheet(sheet: ExcelJS.Worksheet, slip: SalarySlipExportData) {
   addMergedRow(sheet, slip.companyName, { bold: true, size: 15 }, 6);
   addMergedRow(sheet, slip.companyAddress, { size: 9, color: MUTED_GREY }, 6);
   if (slip.companyGstNo) addMergedRow(sheet, `GSTIN: ${slip.companyGstNo}`, { size: 9, color: MUTED_GREY }, 6);
-  addMergedRow(sheet, `PAY SLIP — ${slip.monthLabel.toUpperCase()}`, { bold: true, size: 11 }, 6);
+  addMergedRow(sheet, `Payslip For The Month Of : ${slip.monthLabel}`, { bold: true, size: 11 }, 6);
   sheet.addRow([]);
 
-  // Employee Details — label:value pairs in columns A/B and C/D (E/F unused here).
-  const detailRows: [string, string, string, string][] = [
-    ["Employee Code", slip.employeeCode, "Employee Name", slip.employeeName],
-    ["Father / Husband", slip.fatherHusbandName ?? "—", "Department", slip.department],
-    ["Designation", slip.designation, "Location", slip.location ?? "—"],
-    ["Payment Mode", slip.paymentMode ?? "—", "Bank A/C", slip.bankAccount ? `${slip.bankAccount}${slip.ifsc ? ` (${slip.ifsc})` : ""}` : "—"],
-    ["PF No.", slip.pfNo ?? "—", "ESIC No.", slip.esicNo ?? "—"],
-    ["UAN", slip.uan ?? "—", "", ""],
+  // One grid — Employee Details, Attendance, Allowance/Payable, and Deductions run as
+  // parallel columns sharing the same rows, matching the source payslip exactly.
+  const bankAc = slip.bankAccount ? `${slip.bankAccount}${slip.ifsc ? ` (${slip.ifsc})` : ""}` : undefined;
+  const empRows = (
+    [
+      ["Employee Code", slip.employeeCode],
+      ["Employee Name", slip.employeeName],
+      ["Father / Husband", slip.fatherHusbandName],
+      ["Department", slip.department],
+      ["Designation", slip.designation],
+      ["Payment Mode", slip.paymentMode],
+      ["A/C No.", bankAc],
+      ["ESI No.", slip.esicNo],
+      ["UAN", slip.uan],
+      ["Location", slip.location],
+    ] as [string, string | null | undefined][]
+  )
+    .filter(([, v]) => !!v)
+    .map(([label, value]) => `${label} : ${value}`);
+
+  const a = slip.attendance;
+  const attRows = [
+    `Month Days : ${a.monthDays}`,
+    `Present : ${a.present}`,
+    `W.Off : ${a.weekOff}`,
+    `Holiday : ${a.holiday}`,
+    `CL : ${a.cl}`,
+    `SL : ${a.sl}`,
+    `LWP : ${a.lwp}`,
+    `Payable : ${a.payableDays}`,
+    `OT : ${a.otHours}`,
   ];
-  for (const [label1, value1, label2, value2] of detailRows) {
-    const row = sheet.addRow([]);
-    labelValueCell(row, 1, 2, label1, value1);
-    if (label2) labelValueCell(row, 3, 4, label2, value2);
+
+  const dedRows = slip.deductions.map((l) => `${l.label} : ${l.amount.toFixed(2)}`);
+
+  const gridHeader = sheet.addRow(["Employee Details", "Attendance", "Allowance", "", "Payable", "Deductions"]);
+  sheet.mergeCells(gridHeader.number, 3, gridHeader.number, 4);
+  styleHeaderRow(gridHeader);
+
+  const maxRows = Math.max(empRows.length, attRows.length, slip.earnings.length, dedRows.length);
+  for (let i = 0; i < maxRows; i++) {
+    const e = slip.earnings[i];
+    const row = sheet.addRow([empRows[i] ?? "", attRows[i] ?? "", e?.label ?? "", e?.rate, e?.payable, dedRows[i] ?? ""]);
+    row.getCell(4).numFmt = MONEY_FORMAT;
+    row.getCell(4).alignment = { horizontal: "right" };
+    row.getCell(5).numFmt = MONEY_FORMAT;
+    row.getCell(5).alignment = { horizontal: "right" };
     row.eachCell((cell) => (cell.border = { bottom: THIN_GREY }));
   }
-  sheet.addRow([]);
-
-  // Attendance — label:value pairs in A/B, C/D, E/F.
-  const attendanceHeader = sheet.addRow(["Attendance"]);
-  sheet.mergeCells(attendanceHeader.number, 1, attendanceHeader.number, 6);
-  styleHeaderRow(attendanceHeader);
-  const a = slip.attendance;
-  const attendanceRows: [string, number, string, number, string, number][] = [
-    ["Month Days", a.monthDays, "Present", a.present, "W. Off", a.weekOff],
-    ["Holiday", a.holiday, "CL", a.cl, "SL", a.sl],
-    ["LWP", a.lwp, "Payable", a.payableDays, "OT (hrs)", a.otHours],
-  ];
-  for (const [label1, value1, label2, value2, label3, value3] of attendanceRows) {
-    const row = sheet.addRow([]);
-    labelValueCell(row, 1, 2, label1, value1);
-    labelValueCell(row, 3, 4, label2, value2);
-    labelValueCell(row, 5, 6, label3, value3);
-    row.eachCell((cell, colNumber) => {
-      cell.border = { bottom: THIN_GREY };
-      if (colNumber % 2 === 0) cell.alignment = { horizontal: "right" };
-    });
-  }
-  sheet.addRow([]);
-
-  const earningsHeader = sheet.addRow(["Allowance", "Amount"]);
-  styleHeaderRow(earningsHeader);
-  slip.earnings.forEach((l) => {
-    const row = sheet.addRow([l.label, l.amount]);
-    row.getCell(2).numFmt = MONEY_FORMAT;
-    row.getCell(2).alignment = { horizontal: "right" };
-  });
-  const grossRow = sheet.addRow(["Total", slip.grossEarning]);
-  grossRow.font = { bold: true };
-  grossRow.getCell(2).numFmt = MONEY_FORMAT;
-  grossRow.getCell(2).alignment = { horizontal: "right" };
-  grossRow.getCell(1).border = grossRow.getCell(2).border = { top: THIN_GREY };
-  sheet.addRow([]);
-
-  const deductionsHeader = sheet.addRow(["Deductions", "Amount"]);
-  styleHeaderRow(deductionsHeader);
-  slip.deductions.forEach((l) => {
-    const row = sheet.addRow([l.label, l.amount]);
-    row.getCell(2).numFmt = MONEY_FORMAT;
-    row.getCell(2).alignment = { horizontal: "right" };
-  });
-  const dedRow = sheet.addRow(["Total", slip.totalDeduction]);
-  dedRow.font = { bold: true };
-  dedRow.getCell(2).numFmt = MONEY_FORMAT;
-  dedRow.getCell(2).alignment = { horizontal: "right" };
-  dedRow.getCell(1).border = dedRow.getCell(2).border = { top: THIN_GREY };
+  const earningsRateTotal = slip.earnings.reduce((sum, l) => sum + l.rate, 0);
+  const totalRow = sheet.addRow(["", "", "Total :", earningsRateTotal, slip.grossEarning, slip.totalDeduction]);
+  totalRow.font = { bold: true };
+  totalRow.getCell(4).numFmt = MONEY_FORMAT;
+  totalRow.getCell(4).alignment = { horizontal: "right" };
+  totalRow.getCell(5).numFmt = MONEY_FORMAT;
+  totalRow.getCell(5).alignment = { horizontal: "right" };
+  totalRow.getCell(6).numFmt = MONEY_FORMAT;
+  totalRow.getCell(6).alignment = { horizontal: "right" };
+  totalRow.eachCell((cell) => (cell.border = { top: THIN_GREY }));
   sheet.addRow([]);
 
   const netRow = sheet.addRow(["Net Salary", slip.netPayable]);
@@ -797,7 +784,7 @@ export interface BillExportData {
   billDate: string;
   monthLabel: string;
   monthLabelShort: string;
-  company: { name: string; address: string; mobile: string | null; gstNo: string | null; pfCode: string | null; esiCode: string | null; bankAccount: string | null; ifsc: string | null; branch: string | null };
+  company: { name: string; address: string; mobile: string | null; email: string | null; gstNo: string | null; pfCode: string | null; esiCode: string | null; bankAccount: string | null; ifsc: string | null; branch: string | null };
   client: { name: string; address: string; gstNo: string | null; panNo: string | null; hsnSac: string | null };
   line: {
     basicWages: number;
@@ -846,7 +833,8 @@ function writeBillSheet(sheet: ExcelJS.Worksheet, data: BillExportData, wageRef?
   addressRow.getCell(1).font = { size: 10, color: MUTED_GREY, name: BILL_SHEET_FONT };
   addressRow.getCell(1).alignment = { horizontal: "center", wrapText: true };
 
-  const mobRow = sheet.addRow([`Mob. ${company.mobile ?? ""}`]);
+  const contactParts = [company.mobile ? `Mob. ${company.mobile}` : "", company.email ? `Email: ${company.email}` : ""].filter(Boolean);
+  const mobRow = sheet.addRow([contactParts.join(" | ")]);
   sheet.mergeCells(mobRow.number, 1, mobRow.number, 4);
   mobRow.getCell(1).font = { size: 10, color: MUTED_GREY, name: BILL_SHEET_FONT };
   mobRow.getCell(1).alignment = { horizontal: "center" };
@@ -1016,4 +1004,98 @@ export async function downloadSalarySlipsBatch(slips: SalarySlipExportData[], mo
     writeSlipSheet(wb.addWorksheet(safeName), slip);
   }
   await downloadWorkbook(wb, `salary-slips-${monthLabel.toLowerCase()}.xlsx`);
+}
+
+export interface NeftPaymentRow {
+  accountNumber: string;
+  accountName: string;
+  ifsc: string;
+  amount: number;
+}
+
+/** Bank NEFT bulk-upload sheet — columns match "ROBOTICS FORMAT NEFT" exactly: SR No, Txn Type, Credit Account Number, Credit Account Name, IFSC, Amount, Narration. */
+export async function downloadNeftSheet(rows: NeftPaymentRow[], filename: string): Promise<void> {
+  const wb = new ExcelJS.Workbook();
+  const sheet = wb.addWorksheet("Sheet1");
+  sheet.columns = [
+    { header: "SR No", key: "sr", width: 8 },
+    { header: "Txn Type", key: "txnType", width: 10 },
+    { header: "Credit Account Number", key: "accountNumber", width: 22 },
+    { header: "Credit Account Name", key: "accountName", width: 24 },
+    { header: "IFSC", key: "ifsc", width: 14 },
+    { header: "Amount", key: "amount", width: 12 },
+    { header: "Narration", key: "narration", width: 16 },
+  ];
+  styleHeaderRow(sheet.getRow(1));
+  rows.forEach((r, i) => {
+    sheet.addRow({ sr: i + 1, txnType: "NEFT", accountNumber: r.accountNumber, accountName: r.accountName.toUpperCase(), ifsc: r.ifsc, amount: r.amount, narration: "NEFT TRANSFER" });
+  });
+  const totalRow = sheet.addRow({ accountName: "Total", amount: rows.reduce((sum, r) => sum + r.amount, 0) });
+  totalRow.font = { bold: true };
+  totalRow.getCell("accountName").alignment = { horizontal: "right" };
+  applyMoneyFormat(sheet, ["amount"]);
+  await downloadWorkbook(wb, filename);
+}
+
+export interface WorkerDetailsSheetRow {
+  code: string;
+  name: string;
+  fatherHusbandName: string | null;
+  category: string | null;
+  designation: string | null;
+  clientName: string;
+  basicSalary: number;
+  hra: number;
+  ta: number;
+  medicalAllow: number;
+  cea: number;
+  miscAllow: number;
+  bankAccount: string | null;
+  ifsc: string | null;
+  bankName: string | null;
+  pfNo: string | null;
+  esicNo: string | null;
+  uan: string | null;
+  dob: string | null;
+  doj: string | null;
+  mobile: string | null;
+  aadharNo: string | null;
+  address: string | null;
+  status: string;
+}
+
+/** Full worker master-data sheet — human-readable client name instead of the internal client id. */
+export async function downloadWorkerDetailsSheet(rows: WorkerDetailsSheetRow[], filename: string): Promise<void> {
+  const wb = new ExcelJS.Workbook();
+  const sheet = wb.addWorksheet("Workers");
+  sheet.columns = [
+    { header: "Code", key: "code", width: 10 },
+    { header: "Name", key: "name", width: 22 },
+    { header: "Father / Husband Name", key: "fatherHusbandName", width: 22 },
+    { header: "Category", key: "category", width: 14 },
+    { header: "Designation", key: "designation", width: 16 },
+    { header: "Client", key: "clientName", width: 22 },
+    { header: "Basic Salary", key: "basicSalary", width: 12 },
+    { header: "HRA", key: "hra", width: 10 },
+    { header: "TA", key: "ta", width: 10 },
+    { header: "Medical Allow.", key: "medicalAllow", width: 12 },
+    { header: "CEA", key: "cea", width: 10 },
+    { header: "Misc. Allow.", key: "miscAllow", width: 12 },
+    { header: "Bank Account", key: "bankAccount", width: 20 },
+    { header: "IFSC", key: "ifsc", width: 14 },
+    { header: "Bank Name", key: "bankName", width: 18 },
+    { header: "PF No.", key: "pfNo", width: 16 },
+    { header: "ESIC No.", key: "esicNo", width: 14 },
+    { header: "UAN", key: "uan", width: 16 },
+    { header: "DOB", key: "dob", width: 12 },
+    { header: "DOJ", key: "doj", width: 12 },
+    { header: "Mobile", key: "mobile", width: 14 },
+    { header: "Aadhar No.", key: "aadharNo", width: 16 },
+    { header: "Address", key: "address", width: 30 },
+    { header: "Status", key: "status", width: 10 },
+  ];
+  styleHeaderRow(sheet.getRow(1));
+  rows.forEach((r) => sheet.addRow(r));
+  applyMoneyFormat(sheet, ["basicSalary", "hra", "ta", "medicalAllow", "cea", "miscAllow"]);
+  await downloadWorkbook(wb, filename);
 }
