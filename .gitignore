@@ -3,4 +3,5 @@ dist/
 .env
 !.env.example
 *.log
+*.tsbuildinfo
 .claude/settings.local.json

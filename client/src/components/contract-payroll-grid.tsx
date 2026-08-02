@@ -5,7 +5,7 @@ import { getPayrollRun, getPayrollLines, saveContractPayrollRun } from "@/servic
 import { getCompany } from "@/services/company";
 import { listClients } from "@/services/clients";
 import { listBills } from "@/services/bills";
-import { calculateWageLine, sumWageLines, calculateBill } from "@/lib/calc";
+import { calculateWageLine, sumWageLines, calculateBill, type WageResult } from "@/lib/calc";
 import { downloadWageRegisterWithBill } from "@/lib/exportExcel";
 import { daysInMonth, monthLabel, monthLabelShort } from "@/lib/date";
 import { formatCurrencyPrecise } from "@/lib/format";
@@ -22,11 +22,71 @@ interface Row {
   workerId: string;
   code: string;
   name: string;
+  fatherHusbandName: string | null;
+  category: string | null;
+  designation: string | null;
+  esicNo: string | null;
+  uan: string | null;
+  pfNo: string | null;
   basicSalary: number;
-  workingDays: number;
+  hra: number;
+  ta: number;
+  medicalAllow: number;
+  cea: number;
+  miscAllow: number;
+  actualPresentDays: number;
+  weekOffHoliday: number;
   otHours: number;
   advance: number;
+  incentiveAllowRate: number;
+  attendAward: number;
+  nightCount: number;
+  nightAllowance: number;
+  otArrear: number;
+  tds: number;
+  otherDeduction: number;
+  leaveEncashment: number;
+  arrears: number;
+  bonus: number;
 }
+
+type NumericRowKey = keyof Omit<Row, "workerId" | "code" | "name" | "fatherHusbandName" | "category" | "designation" | "esicNo" | "uan" | "pfNo">;
+
+/** Per-period manual inputs, in on-screen order — everything except the attendance split (actualPresentDays/weekOffHoliday), which has its own max-days validation and sits first. */
+const EDITABLE_COLUMNS: { key: NumericRowKey; label: string }[] = [
+  { key: "otHours", label: "OT Hours" },
+  { key: "advance", label: "Advance" },
+  { key: "incentiveAllowRate", label: "Incentive Rate" },
+  { key: "attendAward", label: "Attend. Award" },
+  { key: "nightCount", label: "No. of Nights" },
+  { key: "nightAllowance", label: "Night Allowance" },
+  { key: "otArrear", label: "OT Arrear" },
+  { key: "tds", label: "TDS" },
+  { key: "otherDeduction", label: "Other Ded." },
+  { key: "leaveEncashment", label: "Leave Encash." },
+  { key: "arrears", label: "Arrears" },
+  { key: "bonus", label: "Bonus & Diwali" },
+];
+
+/** Computed display columns, in on-screen order. */
+const DISPLAY_COLUMNS: { key: keyof WageResult; label: string; emphasis?: boolean; danger?: boolean; positive?: boolean }[] = [
+  { key: "basicEarn", label: "Basic Earn" },
+  { key: "hraEarn", label: "HRA Earn" },
+  { key: "taEarn", label: "TA Earn" },
+  { key: "medicalEarn", label: "Medical Earn" },
+  { key: "ceaEarn", label: "CEA Earn" },
+  { key: "miscEarn", label: "Misc Earn" },
+  { key: "otAmount", label: "OT Amount" },
+  { key: "incentive", label: "Incentive Amt" },
+  { key: "grossEarning", label: "Gross", emphasis: true },
+  { key: "pf", label: "PF" },
+  { key: "esic", label: "ESIC" },
+  { key: "employerEsic", label: "Employer ESIC" },
+  { key: "otEsic", label: "OT ESIC" },
+  { key: "lwf", label: "LWF" },
+  { key: "totalDeduction", label: "Total Ded.", danger: true },
+  { key: "netPayable", label: "Net Payable", emphasis: true, positive: true },
+];
 
 export function ContractPayrollGrid({ month, year }: { month: number; year: number }) {
   const maxDays = daysInMonth(month, year);
@@ -68,10 +128,32 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
           workerId: w.id,
           code: w.code,
           name: w.name,
+          fatherHusbandName: w.fatherHusbandName,
+          category: w.category,
+          designation: w.designation,
+          esicNo: w.esicNo,
+          uan: w.uan,
+          pfNo: w.pfNo,
           basicSalary: Number(w.basicSalary),
-          workingDays: line ? Number(line.workingDays) : maxDays,
+          hra: Number(w.hra),
+          ta: Number(w.ta),
+          medicalAllow: Number(w.medicalAllow),
+          cea: Number(w.cea),
+          miscAllow: Number(w.miscAllow),
+          actualPresentDays: line ? Number(line.actualPresentDays) : maxDays,
+          weekOffHoliday: line ? Number(line.weekOffHoliday) : 0,
           otHours: line ? Number(line.otHours) : 0,
           advance: line ? Number(line.advance) : 0,
+          incentiveAllowRate: line ? Number(line.incentiveAllowRate) : 0,
+          attendAward: line ? Number(line.attendAward) : 0,
+          nightCount: line ? Number(line.nightCount) : 0,
+          nightAllowance: line ? Number(line.nightAllowance) : 0,
+          otArrear: line ? Number(line.otArrear) : 0,
+          tds: line ? Number(line.tds) : 0,
+          otherDeduction: line ? Number(line.otherDeduction) : 0,
+          leaveEncashment: line ? Number(line.leaveEncashment) : 0,
+          arrears: line ? Number(line.arrears) : 0,
+          bonus: line ? Number(line.bonus) : 0,
         };
       })
     );
@@ -83,10 +165,20 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
   }
 
   const computed = useMemo(() => (rows ?? []).map((r) => ({ row: r, result: calculateWageLine({ ...r, monthDays: maxDays }) })), [rows, maxDays]);
-  const totals = useMemo(
-    () => sumWageLines((rows ?? []).map((r) => ({ basicSalary: r.basicSalary, monthDays: maxDays, workingDays: r.workingDays, otHours: r.otHours, advance: r.advance }))),
-    [rows, maxDays]
-  );
+  const totals = useMemo(() => sumWageLines((rows ?? []).map((r) => ({ ...r, monthDays: maxDays }))), [rows, maxDays]);
+
+  // sumWageLines omits the statutory-deduction totals (they're per-worker-rounded, see wage.ts) —
+  // sum the already-rounded per-worker results here instead, for both the on-screen footer and export.
+  const deductionTotals = useMemo(() => {
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    return {
+      pf: round2(computed.reduce((sum, { result }) => sum + result.pf, 0)),
+      esic: round2(computed.reduce((sum, { result }) => sum + result.esic, 0)),
+      employerEsic: round2(computed.reduce((sum, { result }) => sum + result.employerEsic, 0)),
+      otEsic: round2(computed.reduce((sum, { result }) => sum + result.otEsic, 0)),
+      lwf: round2(computed.reduce((sum, { result }) => sum + result.lwf, 0)),
+    };
+  }, [computed]);
 
   async function onGenerate() {
     setGenerating(true);
@@ -97,46 +189,127 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
       const existingBill = bills.find((b) => b.month === month && b.year === year);
 
       const round2 = (n: number) => Math.round(n * 100) / 100;
-      const workingDaysTotal = round2(computed.reduce((sum, { row }) => sum + row.workingDays, 0));
-      const esicTotal = round2(computed.reduce((sum, { result }) => sum + result.esic, 0));
-      const lwfTotal = round2(computed.reduce((sum, { result }) => sum + result.lwf, 0));
-      const advanceTotal = round2(computed.reduce((sum, { result }) => sum + result.advance, 0));
+      // Regular-wages-stream deduction/net figures for the Salary Sheet — excludes otEsic,
+      // which belongs to the separate OT Calculation stream's own Net Payable.
+      const advanceTotal = computed.reduce((sum, { result }) => sum + result.advance, 0);
+      const tdsTotal = computed.reduce((sum, { result }) => sum + result.tds, 0);
+      const otherDeductionTotal = computed.reduce((sum, { result }) => sum + result.otherDeduction, 0);
+      const regularTotalDeduction = round2(deductionTotals.pf + deductionTotals.esic + deductionTotals.lwf + advanceTotal + tdsTotal + otherDeductionTotal);
+      const regularNetPayable = round2(totals.grossWagesErnd + totals.arrears + totals.bonus + totals.leaveEncashment - regularTotalDeduction);
+      const otGrossPayableTotal = round2(totals.otAmount + totals.nightAllowance + totals.attendAward + totals.incentive);
+      const otTotalGrossPayableTotal = round2(otGrossPayableTotal + totals.otArrear);
+      const otNetPayableTotal = round2(otTotalGrossPayableTotal - deductionTotals.otEsic);
 
       // The bill is always computed live from this same wage register — never from a
-      // possibly-stale persisted Bill — so the two sheets in the download stay internally
+      // possibly-stale persisted Bill — so the sheets in the download stay internally
       // consistent even if the register has unsaved edits. Only the bill number/date are
       // reused from a real persisted Bill when one already exists for this period.
-      const bill = calculateBill({ basicWages: totals.basicEarn, incentiveAmt: totals.otAmount });
+      const bill = calculateBill({
+        workerBasicEarnings: computed.map(({ result }) => result.basicEarn),
+        workerHraEarnings: computed.map(({ result }) => result.hraEarn),
+        otAmount: totals.otAmount,
+        attendAward: totals.attendAward,
+        incentiveAmt: totals.incentive,
+        lwf: deductionTotals.lwf * 2,
+      });
 
       await downloadWageRegisterWithBill({
         companyName: company.name,
         monthLabel: monthLabel(month, year),
-        rows: computed.map(({ row, result }) => ({
+        monthDays: maxDays,
+        rows: computed.map(({ row, result }) => {
+          const regularDeduction = round2(result.pf + result.esic + result.lwf + result.advance + result.tds + result.otherDeduction);
+          return {
+            code: row.code,
+            name: row.name,
+            fatherHusbandName: row.fatherHusbandName,
+            category: row.category,
+            designation: row.designation,
+            esicNo: row.esicNo,
+            uan: row.uan,
+            pfNo: row.pfNo,
+            basicSalary: row.basicSalary,
+            hra: row.hra,
+            ta: row.ta,
+            medicalAllow: row.medicalAllow,
+            cea: row.cea,
+            miscAllow: row.miscAllow,
+            monthDays: maxDays,
+            actualPresentDays: row.actualPresentDays,
+            weekOffHoliday: row.weekOffHoliday,
+            basicEarn: result.basicEarn,
+            hraEarn: result.hraEarn,
+            taEarn: result.taEarn,
+            medicalEarn: result.medicalEarn,
+            ceaEarn: result.ceaEarn,
+            miscEarn: result.miscEarn,
+            grossEarning: result.grossWagesErnd,
+            pf: result.pf,
+            esic: result.esic,
+            employerEsic: result.employerEsic,
+            lwf: result.lwf,
+            tds: result.tds,
+            advance: result.advance,
+            otherDeduction: result.otherDeduction,
+            leaveEncashment: result.leaveEncashment,
+            arrears: result.arrears,
+            bonus: result.bonus,
+            totalDeduction: regularDeduction,
+            netPayable: round2(result.grossWagesErnd + result.arrears + result.bonus + result.leaveEncashment - regularDeduction),
+          };
+        }),
+        totals: {
+          basicEarn: totals.basicEarn,
+          hraEarn: totals.hraEarn,
+          taEarn: totals.taEarn,
+          medicalEarn: totals.medicalEarn,
+          ceaEarn: totals.ceaEarn,
+          miscEarn: totals.miscEarn,
+          grossEarning: totals.grossWagesErnd,
+          pf: deductionTotals.pf,
+          esic: deductionTotals.esic,
+          employerEsic: deductionTotals.employerEsic,
+          lwf: deductionTotals.lwf,
+          tds: tdsTotal,
+          advance: advanceTotal,
+          otherDeduction: otherDeductionTotal,
+          leaveEncashment: totals.leaveEncashment,
+          arrears: totals.arrears,
+          bonus: totals.bonus,
+          totalDeduction: regularTotalDeduction,
+          netPayable: regularNetPayable,
+        },
+        otRows: computed.map(({ row, result }) => ({
           code: row.code,
           name: row.name,
-          basicSalary: row.basicSalary,
+          fatherHusbandName: row.fatherHusbandName,
+          category: row.category,
+          designation: row.designation,
           monthDays: maxDays,
-          workingDays: row.workingDays,
+          actualPresentDays: row.actualPresentDays,
+          weekOffHoliday: row.weekOffHoliday,
           otHours: row.otHours,
-          basicEarn: result.basicEarn,
+          basicSalary: row.basicSalary,
+          incentiveAllowRate: row.incentiveAllowRate,
           otAmount: result.otAmount,
-          grossEarning: result.grossEarning,
-          esic: result.esic,
-          lwf: result.lwf,
-          advance: result.advance,
-          totalDeduction: result.totalDeduction,
-          netPayable: result.netPayable,
+          nightCount: row.nightCount,
+          nightAllowance: result.nightAllowance,
+          attendAward: result.attendAward,
+          incentive: result.incentive,
+          grossPayable: round2(result.otAmount + result.nightAllowance + result.attendAward + result.incentive),
+          otArrear: result.otArrear,
+          otEsic: result.otEsic,
+          netPayable: round2(result.otAmount + result.nightAllowance + result.attendAward + result.incentive + result.otArrear - result.otEsic),
         })),
-        totals: {
-          workingDays: workingDaysTotal,
-          basicEarn: totals.basicEarn,
+        otTotals: {
           otAmount: totals.otAmount,
-          grossEarning: totals.grossEarning,
-          esic: esicTotal,
-          lwf: lwfTotal,
-          advance: advanceTotal,
-          totalDeduction: totals.totalDeduction,
-          netPayable: totals.netPayable,
+          nightAllowance: totals.nightAllowance,
+          attendAward: totals.attendAward,
+          incentive: totals.incentive,
+          grossPayable: otGrossPayableTotal,
+          otArrear: totals.otArrear,
+          otEsic: deductionTotals.otEsic,
+          netPayable: otNetPayableTotal,
         },
         bill: {
           billNo: existingBill?.billNo ?? "DRAFT",
@@ -174,7 +347,23 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
         month,
         year,
         clientId,
-        rows.map((r) => ({ contractWorkerId: r.workerId, workingDays: r.workingDays, otHours: r.otHours, advance: r.advance }))
+        rows.map((r) => ({
+          contractWorkerId: r.workerId,
+          actualPresentDays: r.actualPresentDays,
+          weekOffHoliday: r.weekOffHoliday,
+          otHours: r.otHours,
+          advance: r.advance,
+          incentiveAllowRate: r.incentiveAllowRate,
+          attendAward: r.attendAward,
+          nightCount: r.nightCount,
+          nightAllowance: r.nightAllowance,
+          otArrear: r.otArrear,
+          tds: r.tds,
+          otherDeduction: r.otherDeduction,
+          leaveEncashment: r.leaveEncashment,
+          arrears: r.arrears,
+          bonus: r.bonus,
+        }))
       );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["payroll-run", "CONTRACT", month, year, clientId] }),
@@ -236,90 +425,106 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
       {isLoading || !rows ? (
         <Skeleton className="h-96 w-full" />
       ) : (
-      <div className="rounded-md border border-border bg-surface">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Code</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead className="text-right">Working Days</TableHead>
-              <TableHead className="text-right">OT Hours</TableHead>
-              <TableHead className="text-right">Advance</TableHead>
-              <TableHead className="text-right">Basic Earn</TableHead>
-              <TableHead className="text-right">OT Amount</TableHead>
-              <TableHead className="text-right">Gross</TableHead>
-              <TableHead className="text-right">ESIC</TableHead>
-              <TableHead className="text-right">LWF</TableHead>
-              <TableHead className="text-right">Total Ded.</TableHead>
-              <TableHead className="text-right">Net Payable</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {computed.map(({ row, result }) => {
-              const overMax = row.workingDays > maxDays;
-              return (
-                <TableRow key={row.workerId}>
-                  <TableCell className="figure">{row.code}</TableCell>
-                  <TableCell>{row.name}</TableCell>
-                  <TableCell className="text-right">
-                    <Input
-                      type="number"
-                      min={0}
-                      max={maxDays}
-                      step="1"
-                      className={`figure ml-auto h-8 w-20 text-right ${overMax ? "border-danger text-danger" : ""}`}
-                      value={row.workingDays}
-                      disabled={isFinalized}
-                      onChange={(e) => updateRow(row.workerId, { workingDays: Number(e.target.value) })}
-                    />
-                    {overMax ? <p className="mt-1 text-xs text-danger">Max {maxDays} days</p> : null}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Input
-                      type="number"
-                      min={0}
-                      step="1"
-                      className="figure ml-auto h-8 w-20 text-right"
-                      value={row.otHours}
-                      disabled={isFinalized}
-                      onChange={(e) => updateRow(row.workerId, { otHours: Number(e.target.value) })}
-                    />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Input
-                      type="number"
-                      min={0}
-                      step="1"
-                      className="figure ml-auto h-8 w-24 text-right"
-                      value={row.advance}
-                      disabled={isFinalized}
-                      onChange={(e) => updateRow(row.workerId, { advance: Number(e.target.value) })}
-                    />
-                  </TableCell>
-                  <TableCell className="figure text-right">{formatCurrencyPrecise(result.basicEarn)}</TableCell>
-                  <TableCell className="figure text-right">{formatCurrencyPrecise(result.otAmount)}</TableCell>
-                  <TableCell className="figure text-right font-medium">{formatCurrencyPrecise(result.grossEarning)}</TableCell>
-                  <TableCell className="figure text-right">{formatCurrencyPrecise(result.esic)}</TableCell>
-                  <TableCell className="figure text-right">{formatCurrencyPrecise(result.lwf)}</TableCell>
-                  <TableCell className="figure text-right text-danger">{formatCurrencyPrecise(result.totalDeduction)}</TableCell>
-                  <TableCell className="figure text-right font-semibold text-positive">{formatCurrencyPrecise(result.netPayable)}</TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-          <TableFooter>
-            <TableRow>
-              <TableCell colSpan={5}>Totals</TableCell>
-              <TableCell className="figure text-right">{formatCurrencyPrecise(totals.basicEarn)}</TableCell>
-              <TableCell className="figure text-right">{formatCurrencyPrecise(totals.otAmount)}</TableCell>
-              <TableCell className="figure text-right">{formatCurrencyPrecise(totals.grossEarning)}</TableCell>
-              <TableCell colSpan={2} />
-              <TableCell className="figure text-right text-danger">{formatCurrencyPrecise(totals.totalDeduction)}</TableCell>
-              <TableCell className="figure text-right text-positive">{formatCurrencyPrecise(totals.netPayable)}</TableCell>
-            </TableRow>
-          </TableFooter>
-        </Table>
-      </div>
+        <div className="overflow-x-auto rounded-md border border-border bg-surface">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Code</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead className="text-right">Present Days</TableHead>
+                <TableHead className="text-right">Week Off/Holiday</TableHead>
+                {EDITABLE_COLUMNS.map((c) => (
+                  <TableHead key={c.key} className="text-right">
+                    {c.label}
+                  </TableHead>
+                ))}
+                {DISPLAY_COLUMNS.map((c) => (
+                  <TableHead key={c.key} className="text-right">
+                    {c.label}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {computed.map(({ row, result }) => {
+                const overMax = row.actualPresentDays + row.weekOffHoliday > maxDays;
+                return (
+                  <TableRow key={row.workerId}>
+                    <TableCell className="figure">{row.code}</TableCell>
+                    <TableCell>{row.name}</TableCell>
+                    <TableCell className="text-right">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={maxDays}
+                        step="1"
+                        className={`figure ml-auto h-8 w-20 text-right ${overMax ? "border-danger text-danger" : ""}`}
+                        value={row.actualPresentDays}
+                        disabled={isFinalized}
+                        onChange={(e) => updateRow(row.workerId, { actualPresentDays: Number(e.target.value) })}
+                      />
+                      {overMax ? <p className="mt-1 text-xs text-danger">Max {maxDays} days</p> : null}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={maxDays}
+                        step="1"
+                        className="figure ml-auto h-8 w-20 text-right"
+                        value={row.weekOffHoliday === 0 ? "" : row.weekOffHoliday}
+                        disabled={isFinalized}
+                        onChange={(e) => updateRow(row.workerId, { weekOffHoliday: Number(e.target.value) })}
+                      />
+                    </TableCell>
+                    {EDITABLE_COLUMNS.map((c) => (
+                      <TableCell key={c.key} className="text-right">
+                        <Input
+                          type="number"
+                          min={0}
+                          step="1"
+                          className="figure ml-auto h-8 w-24 text-right"
+                          value={row[c.key] === 0 ? "" : row[c.key]}
+                          disabled={isFinalized}
+                          onChange={(e) => updateRow(row.workerId, { [c.key]: Number(e.target.value) })}
+                        />
+                      </TableCell>
+                    ))}
+                    {DISPLAY_COLUMNS.map((c) => (
+                      <TableCell
+                        key={c.key}
+                        className={`figure text-right ${c.emphasis ? "font-medium" : ""} ${c.danger ? "text-danger" : ""} ${c.positive ? "font-semibold text-positive" : ""}`}
+                      >
+                        {formatCurrencyPrecise(result[c.key])}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableCell colSpan={2 + 2 + EDITABLE_COLUMNS.length}>Totals</TableCell>
+                <TableCell className="figure text-right">{formatCurrencyPrecise(totals.basicEarn)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrencyPrecise(totals.hraEarn)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrencyPrecise(totals.taEarn)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrencyPrecise(totals.medicalEarn)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrencyPrecise(totals.ceaEarn)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrencyPrecise(totals.miscEarn)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrencyPrecise(totals.otAmount)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrencyPrecise(totals.incentive)}</TableCell>
+                <TableCell className="figure text-right font-medium">{formatCurrencyPrecise(totals.grossEarning)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrencyPrecise(deductionTotals.pf)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrencyPrecise(deductionTotals.esic)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrencyPrecise(deductionTotals.employerEsic)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrencyPrecise(deductionTotals.otEsic)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrencyPrecise(deductionTotals.lwf)}</TableCell>
+                <TableCell className="figure text-right text-danger">{formatCurrencyPrecise(totals.totalDeduction)}</TableCell>
+                <TableCell className="figure text-right font-semibold text-positive">{formatCurrencyPrecise(totals.netPayable)}</TableCell>
+              </TableRow>
+            </TableFooter>
+          </Table>
+        </div>
       )}
     </div>
   );

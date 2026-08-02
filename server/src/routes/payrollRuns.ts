@@ -76,9 +76,20 @@ payrollRunsRouter.get("/:id/lines", async (req, res) => {
 
 const saveLineSchema = z.object({
   contractWorkerId: z.string().min(1),
-  workingDays: z.number().min(0),
+  actualPresentDays: z.number().min(0),
+  weekOffHoliday: z.number().min(0).default(0),
   otHours: z.number().min(0).default(0),
   advance: z.number().min(0).default(0),
+  incentiveAllowRate: z.number().min(0).default(0),
+  attendAward: z.number().min(0).default(0),
+  nightCount: z.number().min(0).default(0),
+  nightAllowance: z.number().min(0).default(0),
+  otArrear: z.number().min(0).default(0),
+  tds: z.number().min(0).default(0),
+  otherDeduction: z.number().min(0).default(0),
+  leaveEncashment: z.number().min(0).default(0),
+  arrears: z.number().min(0).default(0),
+  bonus: z.number().min(0).default(0),
 });
 
 export const saveContractRunSchema = z.object({
@@ -110,12 +121,23 @@ export const saveContractRunSchema = z.object({
  *                 type: array
  *                 items:
  *                   type: object
- *                   required: [contractWorkerId, workingDays]
+ *                   required: [contractWorkerId, actualPresentDays]
  *                   properties:
  *                     contractWorkerId: { type: string }
- *                     workingDays: { type: number }
+ *                     actualPresentDays: { type: number }
+ *                     weekOffHoliday: { type: number }
  *                     otHours: { type: number }
  *                     advance: { type: number }
+ *                     incentiveAllowRate: { type: number, description: "Monthly incentive allowance rate; prorated into the earned incentive amount same as basicSalary." }
+ *                     attendAward: { type: number, description: "Flat attendance award amount, not prorated." }
+ *                     nightCount: { type: number, description: "Informational only, not used in any formula." }
+ *                     nightAllowance: { type: number, description: "Flat amount, feeds the OT stream's Gross Payable." }
+ *                     otArrear: { type: number, description: "Flat amount, prior-period correction feeding the OT stream's Total Gross Payable." }
+ *                     tds: { type: number }
+ *                     otherDeduction: { type: number }
+ *                     leaveEncashment: { type: number }
+ *                     arrears: { type: number }
+ *                     bonus: { type: number }
  *     responses:
  *       200: { description: The saved payroll run }
  *       400: { description: Validation error, an unknown worker id, or a worker that belongs to a different client }
@@ -160,13 +182,40 @@ payrollRunsRouter.put("/contract", requireRole("ADMIN", "HR"), async (req, res) 
   const monthDays = new Date(year, month, 0).getDate();
   const lineData = lines.map((l) => {
     const worker = workerMap.get(l.contractWorkerId)!;
-    const result = calculateWageLine({ basicSalary: Number(worker.basicSalary), monthDays, workingDays: l.workingDays, otHours: l.otHours, advance: l.advance });
+    const result = calculateWageLine({
+      basicSalary: Number(worker.basicSalary),
+      hra: Number(worker.hra),
+      ta: Number(worker.ta),
+      medicalAllow: Number(worker.medicalAllow),
+      cea: Number(worker.cea),
+      miscAllow: Number(worker.miscAllow),
+      monthDays,
+      actualPresentDays: l.actualPresentDays,
+      weekOffHoliday: l.weekOffHoliday,
+      otHours: l.otHours,
+      advance: l.advance,
+      incentiveAllowRate: l.incentiveAllowRate,
+      attendAward: l.attendAward,
+      nightAllowance: l.nightAllowance,
+      otArrear: l.otArrear,
+      tds: l.tds,
+      otherDeduction: l.otherDeduction,
+      leaveEncashment: l.leaveEncashment,
+      arrears: l.arrears,
+      bonus: l.bonus,
+    });
+    // grossWagesErnd is a derived intermediate (Basic+HRA+allowances earned, used by the bill
+    // route), not a PayrollLine column — must be excluded from the create payload.
+    const { grossWagesErnd: _grossWagesErnd, ...lineFields } = result;
     return {
       payrollRunId: run.id,
       contractWorkerId: l.contractWorkerId,
-      workingDays: l.workingDays,
+      actualPresentDays: l.actualPresentDays,
+      weekOffHoliday: l.weekOffHoliday,
       otHours: l.otHours,
-      ...result,
+      incentiveAllowRate: l.incentiveAllowRate,
+      nightCount: l.nightCount,
+      ...lineFields,
     };
   });
 

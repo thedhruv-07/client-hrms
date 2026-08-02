@@ -14,13 +14,28 @@ contractWorkersRouter.use(requireAuth);
 export const createSchema = z.object({
   code: z.string().min(1),
   name: z.string().min(1),
+  fatherHusbandName: z.string().optional(),
+  category: z.string().optional(),
+  designation: z.string().optional(),
   clientId: z.string().min(1),
-  basicSalary: z.number().positive(),
+  // 0 allowed (not just positive) so bulk-imported rows without salary data yet can still be created.
+  basicSalary: z.number().min(0),
+  hra: z.number().min(0).optional(),
+  ta: z.number().min(0).optional(),
+  medicalAllow: z.number().min(0).optional(),
+  cea: z.number().min(0).optional(),
+  miscAllow: z.number().min(0).optional(),
   bankAccount: z.string().optional(),
   ifsc: z.string().optional(),
   pfNo: z.string().optional(),
   esicNo: z.string().optional(),
   uan: z.string().optional(),
+  dob: z.coerce.date().optional(),
+  doj: z.coerce.date().optional(),
+  mobile: z.string().optional(),
+  aadharNo: z.string().optional(),
+  address: z.string().optional(),
+  bankName: z.string().optional(),
 });
 
 export const updateSchema = createSchema.partial().extend({
@@ -29,7 +44,62 @@ export const updateSchema = createSchema.partial().extend({
 
 const importSchema = z.object({ csv: z.string().min(1) });
 
-const CSV_COLUMNS = ["code", "name", "clientId", "basicSalary", "bankAccount", "ifsc", "pfNo", "esicNo", "uan", "status"];
+const CSV_COLUMNS = [
+  "code",
+  "name",
+  "fatherHusbandName",
+  "category",
+  "designation",
+  "clientId",
+  "basicSalary",
+  "hra",
+  "ta",
+  "medicalAllow",
+  "cea",
+  "miscAllow",
+  "bankAccount",
+  "ifsc",
+  "pfNo",
+  "esicNo",
+  "uan",
+  "dob",
+  "doj",
+  "mobile",
+  "aadharNo",
+  "address",
+  "bankName",
+  "status",
+];
+
+const CODE_PREFIX = "CW-";
+
+/** Computes the next unused `CW-NNN` code, for rows in a bulk import with no code of their own. */
+async function nextAutoCode(): Promise<() => string> {
+  const workers = await prisma.contractWorker.findMany({
+    where: { code: { startsWith: CODE_PREFIX } },
+    select: { code: true },
+  });
+  let max = 0;
+  for (const w of workers) {
+    const n = Number(w.code.slice(CODE_PREFIX.length));
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  let next = max;
+  return () => {
+    next += 1;
+    return `${CODE_PREFIX}${String(next).padStart(3, "0")}`;
+  };
+}
+
+// Connection errors surface with the raw Node network error code (not a Prisma P-code)
+// when using the pg driver adapter — seen in practice as a one-off ECONNREFUSED while
+// Supabase's pooler wakes a paused free-tier project back up. Worth one retry before
+// giving up on a row.
+const TRANSIENT_CONNECTION_CODES = new Set(["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EPIPE"]);
+
+function isTransientConnectionError(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && TRANSIENT_CONNECTION_CODES.has(err.code);
+}
 
 function isNotFoundError(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025";
@@ -84,7 +154,7 @@ contractWorkersRouter.get("/", async (req, res) => {
  *     summary: Export all contract workers as CSV
  *     responses:
  *       200:
- *         description: CSV file (code,name,basicSalary,bankAccount,ifsc,pfNo,esicNo,uan,status)
+ *         description: CSV file (code,name,fatherHusbandName,category,designation,clientId,basicSalary,hra,ta,medicalAllow,cea,miscAllow,bankAccount,ifsc,pfNo,esicNo,uan,dob,doj,mobile,aadharNo,address,bankName,status)
  *         content:
  *           text/csv: { schema: { type: string } }
  *       401: { description: Missing or invalid token }
@@ -96,13 +166,27 @@ contractWorkersRouter.get("/export", async (_req, res) => {
     workers.map((w) => ({
       code: w.code,
       name: w.name,
+      fatherHusbandName: w.fatherHusbandName,
+      category: w.category,
+      designation: w.designation,
       clientId: w.clientId,
       basicSalary: w.basicSalary.toString(),
+      hra: w.hra.toString(),
+      ta: w.ta.toString(),
+      medicalAllow: w.medicalAllow.toString(),
+      cea: w.cea.toString(),
+      miscAllow: w.miscAllow.toString(),
       bankAccount: w.bankAccount,
       ifsc: w.ifsc,
       pfNo: w.pfNo,
       esicNo: w.esicNo,
       uan: w.uan,
+      dob: w.dob ? w.dob.toISOString().slice(0, 10) : undefined,
+      doj: w.doj ? w.doj.toISOString().slice(0, 10) : undefined,
+      mobile: w.mobile,
+      aadharNo: w.aadharNo,
+      address: w.address,
+      bankName: w.bankName,
       status: w.status,
     })),
     CSV_COLUMNS
@@ -126,7 +210,7 @@ contractWorkersRouter.get("/export", async (_req, res) => {
  *             type: object
  *             required: [csv]
  *             properties:
- *               csv: { type: string, description: "Header row: code,name,basicSalary,bankAccount,ifsc,pfNo,esicNo,uan" }
+ *               csv: { type: string, description: "Header row: code,name,fatherHusbandName,category,designation,clientId,basicSalary,hra,ta,medicalAllow,cea,miscAllow,bankAccount,ifsc,pfNo,esicNo,uan,dob,doj,mobile,aadharNo,address,bankName. A blank code auto-generates the next CW-NNN." }
  *     responses:
  *       200:
  *         description: Per-row results — a row failing validation or a duplicate code doesn't abort the rest of the import
@@ -147,31 +231,58 @@ contractWorkersRouter.post("/import", requireRole("ADMIN", "HR"), async (req, re
   const rows = parseCsv(parsedBody.data.csv);
   const results: { row: number; code?: string; error?: string }[] = [];
   let created = 0;
+  const genCode = await nextAutoCode();
 
   for (const [i, row] of rows.entries()) {
     const rowNumber = i + 2; // 1 for the header, 1 for 1-indexing
     const parsed = createSchema.safeParse({
-      code: row["code"],
+      code: row["code"] || genCode(),
       name: row["name"],
+      fatherHusbandName: row["fatherHusbandName"] || undefined,
+      category: row["category"] || undefined,
+      designation: row["designation"] || undefined,
       clientId: row["clientId"],
-      basicSalary: Number(row["basicSalary"]),
+      basicSalary: row["basicSalary"] ? Number(row["basicSalary"]) : 0,
+      hra: row["hra"] ? Number(row["hra"]) : undefined,
+      ta: row["ta"] ? Number(row["ta"]) : undefined,
+      medicalAllow: row["medicalAllow"] ? Number(row["medicalAllow"]) : undefined,
+      cea: row["cea"] ? Number(row["cea"]) : undefined,
+      miscAllow: row["miscAllow"] ? Number(row["miscAllow"]) : undefined,
       bankAccount: row["bankAccount"] || undefined,
       ifsc: row["ifsc"] || undefined,
       pfNo: row["pfNo"] || undefined,
       esicNo: row["esicNo"] || undefined,
       uan: row["uan"] || undefined,
+      dob: row["dob"] || undefined,
+      doj: row["doj"] || undefined,
+      mobile: row["mobile"] || undefined,
+      aadharNo: row["aadharNo"] || undefined,
+      address: row["address"] || undefined,
+      bankName: row["bankName"] || undefined,
     });
     if (!parsed.success) {
       results.push({ row: rowNumber, error: parsed.error.issues.map((issue) => issue.message).join("; ") });
       continue;
     }
     try {
-      const worker = await prisma.contractWorker.create({ data: parsed.data });
+      let worker;
+      try {
+        worker = await prisma.contractWorker.create({ data: parsed.data });
+      } catch (err) {
+        if (!isTransientConnectionError(err)) throw err;
+        worker = await prisma.contractWorker.create({ data: parsed.data });
+      }
       await logAudit({ userId: req.user!.id, action: "IMPORT", entityType: "ContractWorker", entityId: worker.id, changes: parsed.data });
       created++;
       results.push({ row: rowNumber, code: worker.code });
     } catch (err) {
-      const message = err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002" ? "Code already in use" : "Unexpected error";
+      let message = "Unexpected error";
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        if (err.code === "P2002") message = "Code already in use";
+        else if (err.code === "P2003") message = "Unknown client";
+      } else if (err instanceof Error) {
+        message = err.message;
+      }
       results.push({ row: rowNumber, error: message });
     }
   }

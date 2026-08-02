@@ -20,9 +20,20 @@ export async function getPayrollLines(runId: string): Promise<PayrollLine[]> {
 
 export interface SaveContractLineInput {
   contractWorkerId: string;
-  workingDays: number;
+  actualPresentDays: number;
+  weekOffHoliday: number;
   otHours: number;
   advance: number;
+  incentiveAllowRate: number;
+  attendAward: number;
+  nightCount: number;
+  nightAllowance: number;
+  otArrear: number;
+  tds: number;
+  otherDeduction: number;
+  leaveEncashment: number;
+  arrears: number;
+  bonus: number;
 }
 
 /** Full replace — the server recalculates every line from each worker's current basicSalary. */

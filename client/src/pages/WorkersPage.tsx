@@ -1,31 +1,39 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { flexRender, getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef, type SortingState } from "@tanstack/react-table";
-import { Plus, Search, ArrowUpDown } from "lucide-react";
-import { listContractWorkers, createContractWorker, updateContractWorker, deactivateContractWorker } from "@/services/contractWorkers";
+import { Plus, Search, ArrowUpDown, Upload } from "lucide-react";
+import { listContractWorkers, createContractWorker, updateContractWorker, deactivateContractWorker, importContractWorkers } from "@/services/contractWorkers";
 import { listClients } from "@/services/clients";
 import type { ContractWorker } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from "@/components/ui/drawer";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { ContractWorkerForm, contractWorkerToDefaults } from "@/components/contract-worker-form";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrencyPrecise } from "@/lib/format";
+import { parseWorkerWorkbook } from "@/lib/workerImport";
 
 export function WorkersPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [clientFilter, setClientFilter] = useState<string>("all");
   const [sorting, setSorting] = useState<SortingState>([{ id: "code", desc: false }]);
   const [addOpen, setAddOpen] = useState(false);
   const [selected, setSelected] = useState<ContractWorker | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importClientId, setImportClientId] = useState<string>("");
+  const [importing, setImporting] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useKeyboardShortcuts({
     onFocusSearch: () => searchRef.current?.focus(),
@@ -33,8 +41,8 @@ export function WorkersPage() {
   });
 
   const { data: workers, isLoading } = useQuery({
-    queryKey: ["contract-workers", search],
-    queryFn: () => listContractWorkers(search || undefined),
+    queryKey: ["contract-workers", search, clientFilter],
+    queryFn: () => listContractWorkers(search || undefined, clientFilter === "all" ? undefined : clientFilter),
   });
 
   const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: listClients });
@@ -45,6 +53,31 @@ export function WorkersPage() {
 
   const existingCodes = useMemo(() => (workers ?? []).map((w) => w.code), [workers]);
   const clientName = useCallback((id: string) => clients?.find((c) => c.id === id)?.name ?? "—", [clients]);
+
+  async function handleImportFile(file: File) {
+    setImporting(true);
+    try {
+      const { csv, rowCount } = await parseWorkerWorkbook(file, importClientId);
+      if (rowCount === 0) {
+        toast({ title: "No rows found", description: "Couldn't find any rows with a Name column in this sheet.", variant: "destructive" });
+        return;
+      }
+      const result = await importContractWorkers(csv);
+      await invalidate();
+      const failed = result.results.filter((r) => r.error);
+      toast({
+        title: `Imported ${result.created} of ${result.total} workers`,
+        description: failed.length > 0 ? `Row ${failed[0]!.row}: ${failed[0]!.error}${failed.length > 1 ? ` (+${failed.length - 1} more)` : ""}` : undefined,
+        variant: failed.length > 0 ? "destructive" : undefined,
+      });
+      setImportOpen(false);
+    } catch (err) {
+      toast({ title: "Import failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
 
   const columns = useMemo<ColumnDef<ContractWorker>[]>(
     () => [
@@ -102,15 +135,36 @@ export function WorkersPage() {
           <h1 className="font-display text-2xl font-semibold">Workers</h1>
           <p className="text-sm text-muted">Contract labour master data</p>
         </div>
-        <Button onClick={() => setAddOpen(true)}>
-          <Plus className="size-4" />
-          Add Worker
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => setImportOpen(true)}>
+            <Upload className="size-4" />
+            Import from Excel
+          </Button>
+          <Button onClick={() => setAddOpen(true)}>
+            <Plus className="size-4" />
+            Add Worker
+          </Button>
+        </div>
       </div>
 
-      <div className="relative w-full max-w-sm">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
-        <Input ref={searchRef} placeholder="Search by name or code… (press /)" className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-full max-w-sm">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
+          <Input ref={searchRef} placeholder="Search by name or code… (press /)" className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <Select value={clientFilter} onValueChange={setClientFilter}>
+          <SelectTrigger className="w-56">
+            <SelectValue placeholder="All Clients" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Clients</SelectItem>
+            {(clients ?? []).map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="rounded-md border border-border bg-surface">
@@ -184,6 +238,52 @@ export function WorkersPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Import from Excel */}
+      <Dialog open={importOpen} onOpenChange={(open) => { setImportOpen(open); if (!open) setImportClientId(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Import Workers from Excel</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="import-client">Client</Label>
+              <Select value={importClientId} onValueChange={setImportClientId}>
+                <SelectTrigger id="import-client">
+                  <SelectValue placeholder="Select a client" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(clients ?? []).map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted">All workers in the sheet will be assigned to this client. Rows with no Code get an auto-generated one.</p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="import-file">Excel file</Label>
+              <Input
+                id="import-file"
+                ref={fileRef}
+                type="file"
+                accept=".xlsx"
+                disabled={!importClientId || importing}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleImportFile(file);
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setImportOpen(false)} disabled={importing}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Detail / Edit drawer */}
       <Drawer open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
         <DrawerContent>
@@ -225,8 +325,40 @@ export function WorkersPage() {
                     <dd>{clientName(selected.clientId)}</dd>
                   </div>
                   <div className="flex justify-between">
+                    <dt className="text-muted">Father Name</dt>
+                    <dd>{selected.fatherHusbandName ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">Category</dt>
+                    <dd>{selected.category ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">Designation</dt>
+                    <dd>{selected.designation ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between">
                     <dt className="text-muted">Basic Salary</dt>
                     <dd className="figure">{formatCurrencyPrecise(Number(selected.basicSalary))}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">HRA</dt>
+                    <dd className="figure">{formatCurrencyPrecise(Number(selected.hra))}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">TA</dt>
+                    <dd className="figure">{formatCurrencyPrecise(Number(selected.ta))}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">Medical Allow.</dt>
+                    <dd className="figure">{formatCurrencyPrecise(Number(selected.medicalAllow))}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">CEA</dt>
+                    <dd className="figure">{formatCurrencyPrecise(Number(selected.cea))}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">Misc. Allow</dt>
+                    <dd className="figure">{formatCurrencyPrecise(Number(selected.miscAllow))}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted">Status</dt>
@@ -253,6 +385,30 @@ export function WorkersPage() {
                   <div className="flex justify-between">
                     <dt className="text-muted">UAN</dt>
                     <dd className="figure">{selected.uan ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">Mobile</dt>
+                    <dd className="figure">{selected.mobile ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">Aadhar No.</dt>
+                    <dd className="figure">{selected.aadharNo ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">Bank Name</dt>
+                    <dd>{selected.bankName ?? "—"}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">Date of Birth</dt>
+                    <dd className="figure">{selected.dob ? selected.dob.slice(0, 10) : "—"}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">Date of Joining</dt>
+                    <dd className="figure">{selected.doj ? selected.doj.slice(0, 10) : "—"}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">Address</dt>
+                    <dd className="text-right">{selected.address ?? "—"}</dd>
                   </div>
                 </dl>
                 <DrawerFooter>

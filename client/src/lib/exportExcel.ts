@@ -50,89 +50,241 @@ function applyMoneyFormat(sheet: ExcelJS.Worksheet, keys: string[], headerRows =
 export interface WageRegisterSheetRow {
   code: string;
   name: string;
+  fatherHusbandName: string | null;
+  category: string | null;
+  designation: string | null;
+  esicNo: string | null;
+  uan: string | null;
+  pfNo: string | null;
   basicSalary: number;
+  hra: number;
+  ta: number;
+  medicalAllow: number;
+  cea: number;
+  miscAllow: number;
   /** Actual calendar days in the period (30/31/28/29) — the per-day rate divisor. */
   monthDays: number;
-  workingDays: number;
-  otHours: number;
+  actualPresentDays: number;
+  weekOffHoliday: number;
   basicEarn: number;
-  otAmount: number;
+  hraEarn: number;
+  taEarn: number;
+  medicalEarn: number;
+  ceaEarn: number;
+  miscEarn: number;
+  /** Basic+HRA+TA+Medical+CEA+Misc earned — the base ESIC/PF/Welfare are computed on. Regular-wages stream only, no OT. */
   grossEarning: number;
+  pf: number;
   esic: number;
+  employerEsic: number;
   lwf: number;
+  tds: number;
   advance: number;
+  otherDeduction: number;
+  leaveEncashment: number;
+  arrears: number;
+  bonus: number;
   totalDeduction: number;
   netPayable: number;
 }
 
 export interface WageRegisterSheetTotals {
-  workingDays: number;
   basicEarn: number;
-  otAmount: number;
+  hraEarn: number;
+  taEarn: number;
+  medicalEarn: number;
+  ceaEarn: number;
+  miscEarn: number;
   grossEarning: number;
+  pf: number;
   esic: number;
+  employerEsic: number;
   lwf: number;
+  tds: number;
   advance: number;
+  otherDeduction: number;
+  leaveEncashment: number;
+  arrears: number;
+  bonus: number;
   totalDeduction: number;
   netPayable: number;
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+export interface OtCalculationSheetRow {
+  code: string;
+  name: string;
+  fatherHusbandName: string | null;
+  category: string | null;
+  designation: string | null;
+  monthDays: number;
+  actualPresentDays: number;
+  weekOffHoliday: number;
+  otHours: number;
+  /** "New Basic" in the source sheet — the worker's basic rate. */
+  basicSalary: number;
+  incentiveAllowRate: number;
+  otAmount: number;
+  nightCount: number;
+  nightAllowance: number;
+  attendAward: number;
+  incentive: number;
+  grossPayable: number;
+  otArrear: number;
+  otEsic: number;
+  netPayable: number;
+}
+
+export interface OtCalculationSheetTotals {
+  otAmount: number;
+  nightAllowance: number;
+  attendAward: number;
+  incentive: number;
+  grossPayable: number;
+  otArrear: number;
+  otEsic: number;
+  netPayable: number;
 }
 
 const HEADER_FILL = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFE7E5DD" } };
 const MEDIUM_GREY = { style: "medium" as const, color: { argb: "FF333333" } };
 
+// Matches Omp_Wages_Overtime_Sheet_JUNE_2026.xlsx's own fonts: Book Antiqua
+// for the SALARY SHEET, Aptos for OT Calculation, Calibri for BILL CALCULATION.
+const SALARY_SHEET_FONT = "Book Antiqua";
+const OT_SHEET_FONT = "Aptos";
+const BILL_SHEET_FONT = "Calibri";
+
 /**
- * Mirrors the source workbook's "Table 1" sheet — S.NO./CODE/NAME wage-per-worker grid plus
- * the ESIC/LWF statutory-contribution footer block. Per-row formulas (not static values) for
- * every derived cell, so opening the file and editing an input (basic salary, working days,
- * OT, advance) recalculates everything downstream exactly like the source workbook does.
- * Returns the TOTAL row number so writeBillSheet can cross-reference it.
+ * Mirrors the source workbook's "SALARY SHEET" — regular wages only (Basic +
+ * HRA), matching the source's own split of regular pay from the separate OT
+ * Calculation sheet. Per-row formulas (not static values) for every derived
+ * cell, so opening the file and editing an input (basic salary, HRA,
+ * working days, advance) recalculates everything downstream exactly like
+ * the source workbook does. Returns the TOTAL row number so writeBillSheet
+ * and writeOtCalculationSheet can cross-reference it.
  */
+// Exact column order/headers from the source SALARY SHEET (A through AU).
+const SALARY_COLS = [
+  "A",
+  "B",
+  "C",
+  "D",
+  "E",
+  "F",
+  "G",
+  "H",
+  "I",
+  "J",
+  "K",
+  "L",
+  "M",
+  "N",
+  "O",
+  "P",
+  "Q",
+  "R",
+  "S",
+  "T",
+  "U",
+  "V",
+  "W",
+  "X",
+  "Y",
+  "Z",
+  "AA",
+  "AB",
+  "AC",
+  "AD",
+  "AE",
+  "AF",
+  "AG",
+  "AH",
+  "AI",
+  "AJ",
+  "AK",
+  "AL",
+  "AM",
+  "AN",
+  "AO",
+  "AP",
+  "AQ",
+  "AR",
+  "AS",
+  "AT",
+  "AU",
+] as const;
+
 function writeWageRegisterSheet(sheet: ExcelJS.Worksheet, data: { companyName: string; monthLabel: string; rows: WageRegisterSheetRow[]; totals: WageRegisterSheetTotals }): number {
-  sheet.columns = [
-    { width: 6 }, // A S.NO.
-    { width: 11 }, // B CODE. No.
-    { width: 18 }, // C NAME
-    { width: 11 }, // D BASIC SALARY
-    { width: 10 }, // E MONTH DAYS
-    { width: 11 }, // F WORKING DAYS
-    { width: 6 }, // G OT
-    { width: 12 }, // H BASIC EARN
-    { width: 11 }, // I OT AMOUNT
-    { width: 13 }, // J GROSS EARNING
-    { width: 9 }, // K PF
-    { width: 12 }, // L ESIC DED (0.75%)
-    { width: 8 }, // M L.W.F
-    { width: 8 }, // N ADV.
-    { width: 9 }, // O TOTAL DED.
-    { width: 12 }, // P NET PAYABLE
-    { width: 11 }, // Q SIGNATURE
-  ];
-  const LAST_COL = 17;
+  sheet.columns = SALARY_COLS.map((_, i) => ({ width: i < 3 ? 16 : 11 }));
+  const LAST_COL = SALARY_COLS.length;
 
   const firstDataRow = 3;
   const lastDataRow = firstDataRow + data.rows.length - 1;
   const totalsRowNum = lastDataRow + 1;
 
-  // Title banner — company name reads as the headline, the period as a subordinate line.
   const titleRow = sheet.addRow([]);
   sheet.mergeCells(titleRow.number, 1, titleRow.number, LAST_COL);
   titleRow.height = 36;
   const titleCell = titleRow.getCell(1);
   titleCell.value = {
     richText: [
-      { font: { bold: true, size: 14 }, text: `${data.companyName}\n` },
-      { font: { bold: true, size: 10 }, text: `WAGES FOR THE MONTH OF ${data.monthLabel.toUpperCase()}` },
+      { font: { bold: true, size: 14, name: SALARY_SHEET_FONT }, text: `${data.companyName}\n` },
+      { font: { bold: true, size: 10, name: SALARY_SHEET_FONT }, text: `SALARY AND WAGES FOR THE MONTH OF ${data.monthLabel.toUpperCase()}` },
     ],
   };
   titleCell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
 
-  const header = sheet.addRow(["S.NO.", "CODE. No.", "NAME", "BASIC SALARY", "MONTH DAYS", "WORKING DAYS", "OT", "BASIC EARN", "OT AMOUNT", "GROSS EARNING", "PF", "ESIC DED (0.75%)", "L.W.F", "ADV.", "TOTAL DED.", "NET PAYABLE", "SIGNATURE"]);
-  header.height = 28;
-  header.font = { bold: true, size: 9 };
+  const header = sheet.addRow([
+    "S. No",
+    "Emp. Code",
+    "Name",
+    "Father Name",
+    "CATOGERY",
+    "Designation",
+    "ESI No.",
+    "UAN No.",
+    "PF NO.",
+    "CTC",
+    "Gross Salary",
+    "Total",
+    "Actual Present Days",
+    "Week Off/ Holiday",
+    "Absent",
+    "Total Days",
+    "BASIC",
+    "Basic Ernd",
+    "HRA",
+    "HRA Ernd",
+    "TA",
+    "TA Ernd",
+    "MEDICAL ALLOW.",
+    "Medical Allows Ernd",
+    "CEA",
+    "CEA Ernd",
+    "MISC. ALLOW",
+    "Misc. Allows Ernd",
+    "Gross Wages Ernd",
+    "ESI Wages",
+    "P.F Wages",
+    "Employer ESIC Cont. 3.25%",
+    "Employee ESIC Cont. 0.75%",
+    "Employee EPF Cont. 12%",
+    "Welfare employee",
+    "Employer's Cont. To Welfare",
+    "TDS",
+    "Advance Deducted From Salary",
+    "Other Deduction",
+    "Leave Encashment",
+    "Bonus & Diwali",
+    "Arrears / Suspension Allow / Advance Paid Against Salary",
+    "Total Deduction",
+    "Net Amount Payable",
+    "Bank",
+    "Full & Final",
+    "Separate Cheque",
+  ]);
+  header.height = 40;
+  header.font = { bold: true, size: 9, name: SALARY_SHEET_FONT };
   header.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
   header.eachCell((cell) => {
     cell.fill = HEADER_FILL;
@@ -145,82 +297,251 @@ function writeWageRegisterSheet(sheet: ExcelJS.Worksheet, data: { companyName: s
       i + 1,
       r.code,
       r.name,
-      r.basicSalary,
+      r.fatherHusbandName ?? "",
+      r.category ?? "",
+      r.designation ?? "",
+      r.esicNo ?? "",
+      r.uan ?? "",
+      r.pfNo ?? "",
+      { formula: `K${rn}`, result: r.basicSalary + r.hra + r.ta + r.medicalAllow + r.cea + r.miscAllow }, // CTC — same as Gross Salary; no separate CTC figure is tracked
+      { formula: `Q${rn}+S${rn}+U${rn}+W${rn}+Y${rn}+AA${rn}`, result: r.basicSalary + r.hra + r.ta + r.medicalAllow + r.cea + r.miscAllow },
       r.monthDays,
-      r.workingDays,
-      r.otHours,
-      { formula: `(D${rn}/E${rn})*F${rn}`, result: r.basicEarn },
-      { formula: `(D${rn}/E${rn}/8)*G${rn}`, result: r.otAmount },
-      { formula: `SUM(H${rn}:I${rn})`, result: r.grossEarning },
-      0,
-      { formula: `(J${rn}*0.75)/100`, result: r.esic },
-      { formula: `(J${rn}*0.2)/100`, result: r.lwf },
+      r.actualPresentDays,
+      r.weekOffHoliday,
+      { formula: `L${rn}-P${rn}`, result: r.monthDays - (r.actualPresentDays + r.weekOffHoliday) },
+      { formula: `SUM(M${rn}:N${rn})`, result: r.actualPresentDays + r.weekOffHoliday },
+      r.basicSalary,
+      { formula: `(Q${rn}/L${rn})*P${rn}`, result: r.basicEarn },
+      r.hra,
+      { formula: `(S${rn}/L${rn})*P${rn}`, result: r.hraEarn },
+      r.ta,
+      { formula: `(U${rn}/L${rn})*P${rn}`, result: r.taEarn },
+      r.medicalAllow,
+      { formula: `(W${rn}/L${rn})*P${rn}`, result: r.medicalEarn },
+      r.cea,
+      { formula: `(Y${rn}/L${rn})*P${rn}`, result: r.ceaEarn },
+      r.miscAllow,
+      { formula: `ROUND((AA${rn}/L${rn})*P${rn},0)`, result: r.miscEarn },
+      { formula: `R${rn}+T${rn}+V${rn}+X${rn}+Z${rn}+AB${rn}`, result: r.grossEarning },
+      { formula: `AC${rn}`, result: r.grossEarning },
+      { formula: `MIN(R${rn},15000)`, result: Math.min(r.basicEarn, 15000) },
+      { formula: `ROUNDUP(AD${rn}*3.25%,0)`, result: r.employerEsic },
+      { formula: `ROUNDUP(AD${rn}*0.75%,0)`, result: r.esic },
+      { formula: `ROUND(AE${rn}*12%,0)`, result: r.pf },
+      { formula: `IF(AC${rn}>=17500,35,ROUNDUP(AC${rn}*0.2%,0))`, result: r.lwf },
+      { formula: `AI${rn}*2`, result: r.lwf * 2 },
+      r.tds,
       r.advance,
-      { formula: `SUM(K${rn}:M${rn})`, result: r.totalDeduction },
-      { formula: `(J${rn}-O${rn}-N${rn})`, result: r.netPayable },
+      r.otherDeduction,
+      r.leaveEncashment,
+      r.bonus,
+      r.arrears,
+      { formula: `AM${rn}+AL${rn}+AK${rn}+AH${rn}+AG${rn}+AI${rn}`, result: r.totalDeduction },
+      { formula: `AC${rn}+AP${rn}+AO${rn}+AN${rn}-AQ${rn}`, result: r.netPayable },
+      { formula: `AR${rn}`, result: r.netPayable },
+      { formula: `AR${rn}-AS${rn}`, result: 0 },
       "",
     ]);
-    row.font = { size: 9 };
+    row.font = { size: 9, name: SALARY_SHEET_FONT };
     row.eachCell((cell) => (cell.border = { bottom: THIN_GREY }));
     row.getCell(1).alignment = { horizontal: "center" };
     row.getCell(2).alignment = { horizontal: "center" };
-    row.getCell(5).alignment = { horizontal: "center" };
-    row.getCell(6).alignment = { horizontal: "center" };
-    row.getCell(7).alignment = { horizontal: "center" };
-    row.getCell(17).alignment = { horizontal: "center" };
   });
 
-  const totalsRow = sheet.addRow([
-    "",
-    "",
-    "TOTAL",
-    "",
-    "",
-    { formula: `SUM(F${firstDataRow}:F${lastDataRow})`, result: data.totals.workingDays },
-    "",
-    { formula: `SUM(H${firstDataRow}:H${lastDataRow})`, result: data.totals.basicEarn },
-    { formula: `SUM(I${firstDataRow}:I${lastDataRow})`, result: data.totals.otAmount },
-    { formula: `SUM(J${firstDataRow}:J${lastDataRow})`, result: data.totals.grossEarning },
-    0,
-    { formula: `SUM(L${firstDataRow}:L${lastDataRow})`, result: data.totals.esic },
-    { formula: `SUM(M${firstDataRow}:M${lastDataRow})`, result: data.totals.lwf },
-    { formula: `SUM(N${firstDataRow}:N${lastDataRow})`, result: data.totals.advance },
-    { formula: `SUM(O${firstDataRow}:O${lastDataRow})`, result: data.totals.totalDeduction },
-    { formula: `SUM(P${firstDataRow}:P${lastDataRow})`, result: data.totals.netPayable },
-    "",
-  ]);
-  totalsRow.font = { bold: true, size: 10 };
-  totalsRow.getCell(6).alignment = { horizontal: "center" };
+  const totalsRow = sheet.addRow(
+    SALARY_COLS.map((col) => {
+      switch (col) {
+        case "C":
+          return "TOTAL";
+        case "R":
+          return { formula: `SUM(R${firstDataRow}:R${lastDataRow})`, result: data.totals.basicEarn };
+        case "T":
+          return { formula: `SUM(T${firstDataRow}:T${lastDataRow})`, result: data.totals.hraEarn };
+        case "V":
+          return { formula: `SUM(V${firstDataRow}:V${lastDataRow})`, result: data.totals.taEarn };
+        case "X":
+          return { formula: `SUM(X${firstDataRow}:X${lastDataRow})`, result: data.totals.medicalEarn };
+        case "Z":
+          return { formula: `SUM(Z${firstDataRow}:Z${lastDataRow})`, result: data.totals.ceaEarn };
+        case "AB":
+          return { formula: `SUM(AB${firstDataRow}:AB${lastDataRow})`, result: data.totals.miscEarn };
+        case "AC":
+        case "AD":
+          return { formula: `SUM(AC${firstDataRow}:AC${lastDataRow})`, result: data.totals.grossEarning };
+        case "AF":
+          return { formula: `SUM(AF${firstDataRow}:AF${lastDataRow})`, result: data.totals.employerEsic };
+        case "AG":
+          return { formula: `SUM(AG${firstDataRow}:AG${lastDataRow})`, result: data.totals.esic };
+        case "AH":
+          return { formula: `SUM(AH${firstDataRow}:AH${lastDataRow})`, result: data.totals.pf };
+        case "AI":
+          return { formula: `SUM(AI${firstDataRow}:AI${lastDataRow})`, result: data.totals.lwf };
+        case "AJ":
+          return { formula: `SUM(AJ${firstDataRow}:AJ${lastDataRow})`, result: data.totals.lwf * 2 };
+        case "AK":
+          return { formula: `SUM(AK${firstDataRow}:AK${lastDataRow})`, result: data.totals.tds };
+        case "AL":
+          return { formula: `SUM(AL${firstDataRow}:AL${lastDataRow})`, result: data.totals.advance };
+        case "AM":
+          return { formula: `SUM(AM${firstDataRow}:AM${lastDataRow})`, result: data.totals.otherDeduction };
+        case "AN":
+          return { formula: `SUM(AN${firstDataRow}:AN${lastDataRow})`, result: data.totals.leaveEncashment };
+        case "AO":
+          return { formula: `SUM(AO${firstDataRow}:AO${lastDataRow})`, result: data.totals.bonus };
+        case "AP":
+          return { formula: `SUM(AP${firstDataRow}:AP${lastDataRow})`, result: data.totals.arrears };
+        case "AQ":
+          return { formula: `SUM(AQ${firstDataRow}:AQ${lastDataRow})`, result: data.totals.totalDeduction };
+        case "AR":
+        case "AS":
+          return { formula: `SUM(AR${firstDataRow}:AR${lastDataRow})`, result: data.totals.netPayable };
+        default:
+          return "";
+      }
+    })
+  );
+  totalsRow.font = { bold: true, size: 10, name: SALARY_SHEET_FONT };
   totalsRow.eachCell((cell) => (cell.border = { top: MEDIUM_GREY }));
 
-  sheet.addRow([]);
+  applyMoneyFormat(sheet, ["J", "K", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "AA", "AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI", "AJ", "AK", "AL", "AM", "AN", "AO", "AP", "AQ", "AR", "AS", "AT"], 2);
 
-  // ESIC/LWF statutory-contribution summary — TOTAL CONTN. sums the wages figure itself
-  // plus both contributions, matching the source workbook's own (slightly unusual) formula.
-  const esicWagesRow = totalsRowNum + 2;
-  const esicContnRow = esicWagesRow + 1;
-  const lwfContnRow = esicContnRow + 1;
+  return totalsRowNum;
+}
 
-  const esicWages = data.totals.grossEarning;
-  const employeeEsicContn = round2((esicWages * 0.75) / 100);
-  const lwfContn = round2((esicWages * 0.2) / 100);
-  const totalContn = round2(esicWages + employeeEsicContn + lwfContn);
+/**
+ * Mirrors the source workbook's "OT Calculation" sheet — the OT/incentive/
+ * attendance-award pay stream, kept separate from regular wages exactly
+ * like the source keeps it as its own sheet with its own ESIC deduction and
+ * Net Payable. Returns the TOTAL row number so writeBillSheet can
+ * cross-reference it.
+ */
+// Exact column order/headers from the source "OT Calculation" sheet (A through V).
+// monthDays isn't its own column in the source (it hardcodes 30 in-formula) — this
+// export embeds the period's real calendar days as a literal in each formula instead,
+// the same "actual days, not hard-coded 30" improvement the wage engine already makes.
+const OT_COLS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V"] as const;
 
-  const contnRows: [string, { formula: string; result: number }][] = [
-    ["ESIC WAGES", { formula: `J${totalsRowNum}`, result: esicWages }],
-    ["EMPLOYEE ESIC CONTN.", { formula: `D${esicWagesRow}*0.75/100`, result: employeeEsicContn }],
-    ["L.W.F CONTN.", { formula: `D${esicWagesRow}*0.2/100`, result: lwfContn }],
-    ["TOTAL CONTN.", { formula: `SUM(D${esicWagesRow}:D${lwfContnRow})`, result: totalContn }],
-  ];
-  for (const [label, value] of contnRows) {
-    const row = sheet.addRow(["", "", label, value]);
-    row.font = { bold: true, size: 10 };
-    row.getCell(3).alignment = { horizontal: "left" };
-    row.getCell(4).numFmt = MONEY_FORMAT;
-    row.getCell(4).alignment = { horizontal: "right" };
-  }
+function writeOtCalculationSheet(sheet: ExcelJS.Worksheet, data: { companyName: string; monthLabel: string; monthDays: number; rows: OtCalculationSheetRow[]; totals: OtCalculationSheetTotals }): number {
+  sheet.columns = OT_COLS.map((_, i) => ({ width: i < 3 ? 16 : 12 }));
+  const LAST_COL = OT_COLS.length;
 
-  applyMoneyFormat(sheet, ["D", "H", "I", "J", "L", "M", "N", "O", "P"], 2);
+  const firstDataRow = 3;
+  const lastDataRow = firstDataRow + data.rows.length - 1;
+  const totalsRowNum = lastDataRow + 1;
+  const { monthDays } = data;
+
+  const titleRow = sheet.addRow([]);
+  sheet.mergeCells(titleRow.number, 1, titleRow.number, LAST_COL);
+  titleRow.height = 36;
+  const titleCell = titleRow.getCell(1);
+  titleCell.value = {
+    richText: [
+      { font: { bold: true, size: 14, name: OT_SHEET_FONT }, text: `${data.companyName}\n` },
+      { font: { bold: true, size: 10, name: OT_SHEET_FONT }, text: `OVERTIME SHEET FOR THE MONTH OF ${data.monthLabel.toUpperCase()}` },
+    ],
+  };
+  titleCell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+
+  const header = sheet.addRow([
+    "S.No.",
+    "Emp Code",
+    "Employee Name",
+    "Father Name",
+    "CATOGERY",
+    "Designation",
+    "Total Days",
+    "OT Hours",
+    "New Basic",
+    "INCENTIVE ALLOW RATE",
+    "OT Amount",
+    "No. of Nights",
+    "Night Allowance",
+    "Attendance Award",
+    "Incentive Amount",
+    "Gross Payable",
+    "Overtime Arrear",
+    "Total Gross Payable",
+    "ESIC @ 0.75%",
+    "Net Payable",
+    "Bank",
+    "Separate Cheque",
+  ]);
+  header.height = 40;
+  header.font = { bold: true, size: 9, name: OT_SHEET_FONT };
+  header.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+  header.eachCell((cell) => {
+    cell.fill = HEADER_FILL;
+    cell.border = { bottom: THIN_GREY };
+  });
+
+  data.rows.forEach((r, i) => {
+    const rn = firstDataRow + i;
+    const totalDays = r.actualPresentDays + r.weekOffHoliday;
+    const row = sheet.addRow([
+      i + 1,
+      r.code,
+      r.name,
+      r.fatherHusbandName ?? "",
+      r.category ?? "",
+      r.designation ?? "",
+      totalDays,
+      r.otHours,
+      r.basicSalary,
+      r.incentiveAllowRate,
+      { formula: `I${rn}*2/${monthDays}/8*H${rn}`, result: r.otAmount },
+      r.nightCount,
+      r.nightAllowance,
+      r.attendAward,
+      { formula: `ROUND(J${rn}/${monthDays}*G${rn},0)`, result: r.incentive },
+      { formula: `SUM(K${rn},M${rn},N${rn},O${rn})`, result: r.otAmount + r.nightAllowance + r.attendAward + r.incentive },
+      r.otArrear,
+      { formula: `P${rn}+Q${rn}`, result: r.grossPayable },
+      { formula: `ROUNDUP(R${rn}*0.75%,0)`, result: r.otEsic },
+      { formula: `R${rn}-S${rn}`, result: r.netPayable },
+      { formula: `T${rn}`, result: r.netPayable },
+      { formula: `U${rn}-T${rn}`, result: 0 },
+    ]);
+    row.font = { size: 9, name: OT_SHEET_FONT };
+    row.eachCell((cell) => (cell.border = { bottom: THIN_GREY }));
+    row.getCell(1).alignment = { horizontal: "center" };
+    row.getCell(2).alignment = { horizontal: "center" };
+    row.getCell(7).alignment = { horizontal: "center" };
+    row.getCell(8).alignment = { horizontal: "center" };
+  });
+
+  const totalsRow = sheet.addRow(
+    OT_COLS.map((col) => {
+      switch (col) {
+        case "D":
+          return "Total";
+        case "K":
+          return { formula: `SUM(K${firstDataRow}:K${lastDataRow})`, result: data.totals.otAmount };
+        case "M":
+          return { formula: `SUM(M${firstDataRow}:M${lastDataRow})`, result: data.totals.nightAllowance };
+        case "N":
+          return { formula: `SUM(N${firstDataRow}:N${lastDataRow})`, result: data.totals.attendAward };
+        case "O":
+          return { formula: `SUM(O${firstDataRow}:O${lastDataRow})`, result: data.totals.incentive };
+        case "P":
+          return { formula: `SUM(P${firstDataRow}:P${lastDataRow})`, result: data.totals.grossPayable };
+        case "Q":
+          return { formula: `SUM(Q${firstDataRow}:Q${lastDataRow})`, result: data.totals.otArrear };
+        case "R":
+          return { formula: `SUM(R${firstDataRow}:R${lastDataRow})`, result: data.totals.grossPayable + data.totals.otArrear };
+        case "S":
+          return { formula: `SUM(S${firstDataRow}:S${lastDataRow})`, result: data.totals.otEsic };
+        case "T":
+        case "U":
+          return { formula: `SUM(T${firstDataRow}:T${lastDataRow})`, result: data.totals.netPayable };
+        default:
+          return "";
+      }
+    })
+  );
+  totalsRow.font = { bold: true, size: 10, name: OT_SHEET_FONT };
+  totalsRow.eachCell((cell) => (cell.border = { top: MEDIUM_GREY }));
+
+  applyMoneyFormat(sheet, ["I", "J", "K", "M", "N", "O", "P", "Q", "R", "S", "T", "U"], 2);
 
   return totalsRowNum;
 }
@@ -481,14 +802,15 @@ export interface BillExportData {
   line: {
     basicWages: number;
     hra: number;
-    con: number;
+    otAmount: number;
+    attendAward: number;
     incentiveAmt: number;
     total1: number;
     esiEmployer: number;
-    esiEmployee: number;
-    lwf1: number;
+    pfBase: number;
+    pfEmployer: number;
+    lwf: number;
     serviceCharge: number;
-    lwf2: number;
     total2: number;
     cgst: number;
     sgst: number;
@@ -502,68 +824,70 @@ interface WageTableRef {
 }
 
 /**
- * Mirrors the source workbook's "Sheet1" row-for-row. Every derived cell (TOTAL (1)/(2), the
- * ESI/LWF/service-charge percentages, CGST/SGST, GRAND TOTAL) is a live formula. Basic Wages
- * and Incentive Amt link to the wage-register sheet's TOTAL row when `wageRef` is given (the
- * combined workbook); standalone (no wage sheet in the file) they're plain editable inputs.
+ * Mirrors the source workbook's "BILL CALCULATION" sheet row-for-row (Calibri, its own font).
+ * Every derived cell (TOTAL (1)/(2), the ESI/PF/service-charge percentages, CGST/SGST, GRAND
+ * TOTAL) is a live formula. Basic Wages/HRA link to the wage-register sheet's TOTAL row and
+ * OT Amount/Attend. Award/Incentive Amt link to the OT Calculation sheet's TOTAL row when
+ * `wageRef`/`otRef` are given (the combined workbook); standalone (no other sheets in the
+ * file) they're plain editable inputs.
  */
-function writeBillSheet(sheet: ExcelJS.Worksheet, data: BillExportData, wageRef?: WageTableRef) {
+function writeBillSheet(sheet: ExcelJS.Worksheet, data: BillExportData, wageRef?: WageTableRef, otRef?: WageTableRef) {
   const { company, client, line } = data;
   sheet.columns = [{ width: 26 }, { width: 20 }, { width: 16 }, { width: 16 }];
 
   const nameRow = sheet.addRow([company.name]);
   sheet.mergeCells(nameRow.number, 1, nameRow.number, 4);
   nameRow.height = 24;
-  nameRow.getCell(1).font = { bold: true, size: 16 };
+  nameRow.getCell(1).font = { bold: true, size: 16, name: BILL_SHEET_FONT };
   nameRow.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
 
   const addressRow = sheet.addRow([company.address]);
   sheet.mergeCells(addressRow.number, 1, addressRow.number, 4);
-  addressRow.getCell(1).font = { size: 10, color: MUTED_GREY };
+  addressRow.getCell(1).font = { size: 10, color: MUTED_GREY, name: BILL_SHEET_FONT };
   addressRow.getCell(1).alignment = { horizontal: "center", wrapText: true };
 
   const mobRow = sheet.addRow([`Mob. ${company.mobile ?? ""}`]);
   sheet.mergeCells(mobRow.number, 1, mobRow.number, 4);
-  mobRow.getCell(1).font = { size: 10, color: MUTED_GREY };
+  mobRow.getCell(1).font = { size: 10, color: MUTED_GREY, name: BILL_SHEET_FONT };
   mobRow.getCell(1).alignment = { horizontal: "center" };
 
   const billRow = sheet.addRow([`Bill No: ${data.billNo}`, "", new Date(data.billDate).toLocaleDateString("en-IN")]);
-  billRow.font = { size: 11 };
+  billRow.font = { size: 11, name: BILL_SHEET_FONT };
   billRow.getCell(3).alignment = { horizontal: "right" };
 
   const clientNameRow = sheet.addRow([`M/s ${client.name}`, "", "GST. NO.", client.gstNo ?? ""]);
-  clientNameRow.getCell(1).font = { bold: true, size: 12 };
-  clientNameRow.getCell(3).font = { size: 10, color: MUTED_GREY };
+  clientNameRow.getCell(1).font = { bold: true, size: 12, name: BILL_SHEET_FONT };
+  clientNameRow.getCell(3).font = { size: 10, color: MUTED_GREY, name: BILL_SHEET_FONT };
   clientNameRow.getCell(3).alignment = { horizontal: "right" };
-  clientNameRow.getCell(4).font = { bold: true, size: 10 };
+  clientNameRow.getCell(4).font = { bold: true, size: 10, name: BILL_SHEET_FONT };
 
   const clientAddrRow = sheet.addRow([client.address, "", "PAN NO.", client.panNo ?? ""]);
   clientAddrRow.height = 28;
-  clientAddrRow.getCell(1).font = { size: 10 };
+  clientAddrRow.getCell(1).font = { size: 10, name: BILL_SHEET_FONT };
   clientAddrRow.getCell(1).alignment = { wrapText: true };
-  clientAddrRow.getCell(3).font = { size: 10, color: MUTED_GREY };
+  clientAddrRow.getCell(3).font = { size: 10, color: MUTED_GREY, name: BILL_SHEET_FONT };
   clientAddrRow.getCell(3).alignment = { horizontal: "right" };
-  clientAddrRow.getCell(4).font = { bold: true, size: 10 };
+  clientAddrRow.getCell(4).font = { bold: true, size: 10, name: BILL_SHEET_FONT };
 
   const pfCodeRow = sheet.addRow(["", "", "PF CODE", company.pfCode ?? ""]);
-  pfCodeRow.getCell(3).font = { size: 10, color: MUTED_GREY };
+  pfCodeRow.getCell(3).font = { size: 10, color: MUTED_GREY, name: BILL_SHEET_FONT };
   pfCodeRow.getCell(3).alignment = { horizontal: "right" };
-  pfCodeRow.getCell(4).font = { bold: true, size: 10 };
+  pfCodeRow.getCell(4).font = { bold: true, size: 10, name: BILL_SHEET_FONT };
 
   const gstRow = sheet.addRow([`GST NO :${company.gstNo ?? ""}`, "", "ESI CODE / HSN-SAC", `${company.esiCode ?? ""} ${client.hsnSac ?? ""}`.trim()]);
-  gstRow.getCell(1).font = { bold: true, size: 10 };
-  gstRow.getCell(3).font = { size: 10, color: MUTED_GREY };
+  gstRow.getCell(1).font = { bold: true, size: 10, name: BILL_SHEET_FONT };
+  gstRow.getCell(3).font = { size: 10, color: MUTED_GREY, name: BILL_SHEET_FONT };
   gstRow.getCell(3).alignment = { horizontal: "right" };
-  gstRow.getCell(4).font = { bold: true, size: 10 };
+  gstRow.getCell(4).font = { bold: true, size: 10, name: BILL_SHEET_FONT };
 
   const titleRow = sheet.addRow([`BILL FOR THE MONTH OF ${data.monthLabel.toUpperCase()}`]);
   sheet.mergeCells(titleRow.number, 1, titleRow.number, 4);
-  titleRow.getCell(1).font = { bold: true, size: 12 };
+  titleRow.getCell(1).font = { bold: true, size: 12, name: BILL_SHEET_FONT };
   titleRow.getCell(1).alignment = { horizontal: "center" };
 
   const header = sheet.addRow(["PARTICULARS", "ATTENDANCE", "RATE", "AMOUNT"]);
   header.height = 20;
-  header.font = { bold: true, size: 10 };
+  header.font = { bold: true, size: 10, name: BILL_SHEET_FONT };
   header.alignment = { horizontal: "center", vertical: "middle" };
   header.eachCell((cell) => {
     cell.fill = HEADER_FILL;
@@ -572,89 +896,83 @@ function writeBillSheet(sheet: ExcelJS.Worksheet, data: BillExportData, wageRef?
   header.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
 
   const basicWagesRow = sheet.addRow([`Basic Wages (${data.monthLabelShort})`]);
-  basicWagesRow.getCell(4).value = wageRef ? { formula: `'${wageRef.sheetName}'!H${wageRef.totalsRow}`, result: line.basicWages } : line.basicWages;
-  basicWagesRow.font = { size: 10 };
+  basicWagesRow.getCell(4).value = wageRef ? { formula: `'${wageRef.sheetName}'!R${wageRef.totalsRow}`, result: line.basicWages } : line.basicWages;
+  basicWagesRow.font = { size: 10, name: BILL_SHEET_FONT };
   const basicWagesRowNum = basicWagesRow.number;
 
-  const hraRow = sheet.addRow(["HRA", "", "", line.hra]);
-  hraRow.font = { size: 10 };
-  const conRow = sheet.addRow(["CON.", "", "", line.con]);
-  conRow.font = { size: 10 };
+  const hraRow = sheet.addRow(["HRA"]);
+  hraRow.getCell(4).value = wageRef ? { formula: `'${wageRef.sheetName}'!T${wageRef.totalsRow}`, result: line.hra } : line.hra;
+  hraRow.font = { size: 10, name: BILL_SHEET_FONT };
   const otRow = sheet.addRow(["OT AMOUNT"]);
-  otRow.font = { size: 10 };
+  otRow.getCell(4).value = otRef ? { formula: `'${otRef.sheetName}'!K${otRef.totalsRow}`, result: line.otAmount } : line.otAmount;
+  otRow.font = { size: 10, name: BILL_SHEET_FONT };
+  const attendAwardRow = sheet.addRow(["ATTEND. AWARD"]);
+  attendAwardRow.getCell(4).value = otRef ? { formula: `'${otRef.sheetName}'!N${otRef.totalsRow}`, result: line.attendAward } : line.attendAward;
+  attendAwardRow.font = { size: 10, name: BILL_SHEET_FONT };
   const incentiveRow = sheet.addRow(["INCENTIVE AMT."]);
-  incentiveRow.getCell(4).value = wageRef ? { formula: `'${wageRef.sheetName}'!I${wageRef.totalsRow}`, result: line.incentiveAmt } : line.incentiveAmt;
-  incentiveRow.font = { size: 10 };
+  incentiveRow.getCell(4).value = otRef ? { formula: `'${otRef.sheetName}'!O${otRef.totalsRow}`, result: line.incentiveAmt } : line.incentiveAmt;
+  incentiveRow.font = { size: 10, name: BILL_SHEET_FONT };
   const incentiveRowNum = incentiveRow.number;
 
   const total1Row = sheet.addRow(["TOTAL (1)"]);
   total1Row.getCell(4).value = { formula: `SUM(D${basicWagesRowNum}:D${incentiveRowNum})`, result: line.total1 };
-  total1Row.font = { bold: true, size: 11 };
+  total1Row.font = { bold: true, size: 11, name: BILL_SHEET_FONT };
   total1Row.eachCell((cell) => (cell.border = { top: THIN_GREY }));
   const total1RowNum = total1Row.number;
 
-  const pfRow = sheet.addRow(["PF @12%", "", 0, 0]);
-  pfRow.font = { size: 10 };
-
   const esi325Row = sheet.addRow(["ESI @ 3.25% ON"]);
   esi325Row.getCell(3).value = { formula: `D${total1RowNum}`, result: line.total1 };
-  esi325Row.getCell(4).value = { formula: `(C${esi325Row.number}*3.25)/100`, result: line.esiEmployer };
-  esi325Row.font = { size: 10 };
+  esi325Row.getCell(4).value = { formula: `ROUNDUP((C${esi325Row.number}*3.25)/100,0)`, result: line.esiEmployer };
+  esi325Row.font = { size: 10, name: BILL_SHEET_FONT };
 
-  const esi075Row = sheet.addRow(["ESI @ 0.75% ON"]);
-  esi075Row.getCell(3).value = { formula: `D${total1RowNum}`, result: line.total1 };
-  esi075Row.getCell(4).value = { formula: `(C${esi075Row.number}*0.75)/100`, result: line.esiEmployee };
-  esi075Row.font = { size: 10 };
+  const pfRow = sheet.addRow(["PF @ 13% ON"]);
+  pfRow.getCell(3).value = line.pfBase;
+  pfRow.getCell(4).value = { formula: `(C${pfRow.number}*13)/100`, result: line.pfEmployer };
+  pfRow.font = { size: 10, name: BILL_SHEET_FONT };
 
-  const lwf1Row = sheet.addRow(["L.W.F @ 0.25% ON"]);
-  lwf1Row.getCell(3).value = { formula: `D${total1RowNum}`, result: line.total1 };
-  lwf1Row.getCell(4).value = { formula: `(C${lwf1Row.number}*0.25)/100`, result: line.lwf1 };
-  lwf1Row.font = { size: 10 };
+  const lwfRow = sheet.addRow(["Labour Welfare Fund"]);
+  lwfRow.getCell(4).value = wageRef ? { formula: `'${wageRef.sheetName}'!AI${wageRef.totalsRow}*2`, result: line.lwf } : line.lwf;
+  lwfRow.font = { size: 10, name: BILL_SHEET_FONT };
 
-  const serviceRow = sheet.addRow(["Service charges@7% on"]);
+  const serviceRow = sheet.addRow(["Service charges@5% on"]);
   serviceRow.getCell(3).value = { formula: `D${total1RowNum}`, result: line.total1 };
-  serviceRow.getCell(4).value = { formula: `(C${serviceRow.number}*7)/100`, result: line.serviceCharge };
-  serviceRow.font = { size: 10 };
-
-  const lwf2Row = sheet.addRow(["Labour Welfare Fund@.2%", "", "Person"]);
-  lwf2Row.getCell(4).value = { formula: `((D${basicWagesRowNum}*0.2)/100)*2`, result: line.lwf2 };
-  lwf2Row.font = { size: 10 };
-  lwf2Row.getCell(3).alignment = { horizontal: "center" };
+  serviceRow.getCell(4).value = { formula: `(C${serviceRow.number}*5)/100`, result: line.serviceCharge };
+  serviceRow.font = { size: 10, name: BILL_SHEET_FONT };
 
   const total2Row = sheet.addRow(["TOTAL (2)"]);
-  total2Row.getCell(4).value = { formula: `SUM(D${total1RowNum}:D${lwf2Row.number})`, result: line.total2 };
-  total2Row.font = { bold: true, size: 11 };
+  total2Row.getCell(4).value = { formula: `SUM(D${total1RowNum}:D${serviceRow.number})`, result: line.total2 };
+  total2Row.font = { bold: true, size: 11, name: BILL_SHEET_FONT };
   total2Row.eachCell((cell) => (cell.border = { top: THIN_GREY }));
   const total2RowNum = total2Row.number;
 
   const cgstRow = sheet.addRow(["CGST @ 9% on"]);
   cgstRow.getCell(3).value = { formula: `D${total2RowNum}`, result: line.total2 };
   cgstRow.getCell(4).value = { formula: `(D${total2RowNum}*9)/100`, result: line.cgst };
-  cgstRow.font = { size: 10 };
+  cgstRow.font = { size: 10, name: BILL_SHEET_FONT };
 
   const sgstRow = sheet.addRow(["SGST @ 9% on"]);
   sgstRow.getCell(3).value = { formula: `D${total2RowNum}`, result: line.total2 };
   sgstRow.getCell(4).value = { formula: `(D${total2RowNum}*9)/100`, result: line.sgst };
-  sgstRow.font = { size: 10 };
+  sgstRow.font = { size: 10, name: BILL_SHEET_FONT };
 
   const grandTotalRow = sheet.addRow(["GRAND TOTAL"]);
   grandTotalRow.getCell(4).value = { formula: `SUM(D${total2RowNum}:D${sgstRow.number})`, result: line.grandTotal };
   grandTotalRow.eachCell((cell) => {
-    cell.font = { bold: true, size: 13 };
+    cell.font = { bold: true, size: 13, name: BILL_SHEET_FONT };
     cell.border = { top: MEDIUM_GREY, bottom: MEDIUM_GREY };
   });
 
   sheet.addRow([]);
   const wordsRow = sheet.addRow([amountInWords(line.grandTotal)]);
   sheet.mergeCells(wordsRow.number, 1, wordsRow.number, 4);
-  wordsRow.getCell(1).font = { bold: true, size: 11 };
+  wordsRow.getCell(1).font = { bold: true, size: 11, name: BILL_SHEET_FONT };
 
   const bankNameRow = sheet.addRow([company.name]);
-  bankNameRow.getCell(1).font = { size: 10 };
+  bankNameRow.getCell(1).font = { size: 10, name: BILL_SHEET_FONT };
   const bankAcRow = sheet.addRow([`A/C NO-${company.bankAccount ?? ""}`]);
-  bankAcRow.getCell(1).font = { size: 10 };
+  bankAcRow.getCell(1).font = { size: 10, name: BILL_SHEET_FONT };
   const bankIfscRow = sheet.addRow([`${company.ifsc ?? ""}   ${company.branch ?? ""}`]);
-  bankIfscRow.getCell(1).font = { size: 10 };
+  bankIfscRow.getCell(1).font = { size: 10, name: BILL_SHEET_FONT };
 
   applyMoneyFormat(sheet, ["C", "D"], 10);
 }
@@ -669,18 +987,24 @@ export async function downloadBill(data: BillExportData): Promise<void> {
 export interface WageRegisterWithBillData {
   companyName: string;
   monthLabel: string;
+  /** Actual calendar days in the period (30/31/28/29) — the OT sheet's per-hour rate divisor. */
+  monthDays: number;
   rows: WageRegisterSheetRow[];
   totals: WageRegisterSheetTotals;
+  otRows: OtCalculationSheetRow[];
+  otTotals: OtCalculationSheetTotals;
   bill: BillExportData;
 }
 
-/** One workbook, two sheets — "Wage Register" and "Bill", matching the source workbook's own layout where the bill formula-links to the wage register in the same file. */
+/** One workbook, three sheets — "Salary Sheet", "OT Calculation", and "Bill" — matching Omp_Wages_Overtime_Sheet_JUNE_2026.xlsx's own layout, with the bill formula-linked to both. */
 export async function downloadWageRegisterWithBill(data: WageRegisterWithBillData): Promise<void> {
   const wb = new ExcelJS.Workbook();
   wb.calcProperties.fullCalcOnLoad = true;
-  const wageSheetName = "Wage Register";
-  const totalsRow = writeWageRegisterSheet(wb.addWorksheet(wageSheetName), { companyName: data.companyName, monthLabel: data.monthLabel, rows: data.rows, totals: data.totals });
-  writeBillSheet(wb.addWorksheet("Bill"), data.bill, { sheetName: wageSheetName, totalsRow });
+  const wageSheetName = "Salary Sheet";
+  const otSheetName = "OT Calculation";
+  const wageTotalsRow = writeWageRegisterSheet(wb.addWorksheet(wageSheetName), { companyName: data.companyName, monthLabel: data.monthLabel, rows: data.rows, totals: data.totals });
+  const otTotalsRow = writeOtCalculationSheet(wb.addWorksheet(otSheetName), { companyName: data.companyName, monthLabel: data.monthLabel, monthDays: data.monthDays, rows: data.otRows, totals: data.otTotals });
+  writeBillSheet(wb.addWorksheet("Bill"), data.bill, { sheetName: wageSheetName, totalsRow: wageTotalsRow }, { sheetName: otSheetName, totalsRow: otTotalsRow });
   await downloadWorkbook(wb, `wage-register-bill-${data.bill.billNo}-${data.monthLabel.toLowerCase()}.xlsx`);
 }
 

@@ -4,13 +4,38 @@ import { api, ApiRequestError } from "./api";
 export interface ContractWorkerInput {
   code: string;
   name: string;
+  fatherHusbandName?: string;
+  category?: string;
+  designation?: string;
   clientId: string;
   basicSalary: number;
+  hra?: number;
+  ta?: number;
+  medicalAllow?: number;
+  cea?: number;
+  miscAllow?: number;
   bankAccount?: string;
   ifsc?: string;
   pfNo?: string;
   esicNo?: string;
   uan?: string;
+  dob?: string;
+  doj?: string;
+  mobile?: string;
+  aadharNo?: string;
+  address?: string;
+  bankName?: string;
+}
+
+export interface ImportResult {
+  created: number;
+  total: number;
+  results: { row: number; code?: string; error?: string }[];
+}
+
+/** Bulk-creates contract workers from a CSV string (header row + rows), reusing the server's existing import endpoint. */
+export async function importContractWorkers(csv: string): Promise<ImportResult> {
+  return api.post<ImportResult>("/contract-workers/import", { csv });
 }
 
 export async function listContractWorkers(q?: string, clientId?: string): Promise<ContractWorker[]> {

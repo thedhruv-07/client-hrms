@@ -10,7 +10,7 @@ import type {
   PayrollRun,
   User,
 } from "@/types";
-import { calculateWageLine, sumWageLines, calculateBill, calculateInHouseWageLine } from "@/lib/calc";
+import { calculateWageLine, calculateBill, calculateInHouseWageLine } from "@/lib/calc";
 import { monthLabel, daysInMonth } from "@/lib/date";
 
 // No real bank/GST/PAN/mobile data here — those fields stay null even
@@ -58,13 +58,13 @@ export const users: User[] = [
 // is back-solved from the known Gross Earning figures. The rest are
 // synthetic, added so lists/tables don't look like a 3-row toy.
 export const contractWorkers: ContractWorker[] = [
-  { id: "cw-1", code: "CW-001", name: "Arun", clientId: "client-1", basicSalary: "17000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
-  { id: "cw-2", code: "CW-002", name: "Biru Kumar", clientId: "client-1", basicSalary: "17000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
-  { id: "cw-3", code: "CW-003", name: "Suraj", clientId: "client-1", basicSalary: "17000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
-  { id: "cw-4", code: "CW-004", name: "Deepak Yadav", clientId: "client-1", basicSalary: "18000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
-  { id: "cw-5", code: "CW-005", name: "Manoj Kumar", clientId: "client-1", basicSalary: "16000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
-  { id: "cw-6", code: "CW-006", name: "Ravi Shankar", clientId: "client-1", basicSalary: "19000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
-  { id: "cw-7", code: "CW-007", name: "Sunita Devi", clientId: "client-1", basicSalary: "15000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "INACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-03-15T00:00:00.000Z" },
+  { id: "cw-1", code: "CW-001", name: "Arun", fatherHusbandName: null, category: null, designation: null, clientId: "client-1", basicSalary: "17000.00", hra: "0.00", ta: "0.00", medicalAllow: "0.00", cea: "0.00", miscAllow: "0.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, dob: null, doj: null, mobile: null, aadharNo: null, address: null, bankName: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+  { id: "cw-2", code: "CW-002", name: "Biru Kumar", fatherHusbandName: null, category: null, designation: null, clientId: "client-1", basicSalary: "17000.00", hra: "0.00", ta: "0.00", medicalAllow: "0.00", cea: "0.00", miscAllow: "0.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, dob: null, doj: null, mobile: null, aadharNo: null, address: null, bankName: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+  { id: "cw-3", code: "CW-003", name: "Suraj", fatherHusbandName: null, category: null, designation: null, clientId: "client-1", basicSalary: "17000.00", hra: "0.00", ta: "0.00", medicalAllow: "0.00", cea: "0.00", miscAllow: "0.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, dob: null, doj: null, mobile: null, aadharNo: null, address: null, bankName: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+  { id: "cw-4", code: "CW-004", name: "Deepak Yadav", fatherHusbandName: null, category: null, designation: null, clientId: "client-1", basicSalary: "18000.00", hra: "0.00", ta: "0.00", medicalAllow: "0.00", cea: "0.00", miscAllow: "0.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, dob: null, doj: null, mobile: null, aadharNo: null, address: null, bankName: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+  { id: "cw-5", code: "CW-005", name: "Manoj Kumar", fatherHusbandName: null, category: null, designation: null, clientId: "client-1", basicSalary: "16000.00", hra: "0.00", ta: "0.00", medicalAllow: "0.00", cea: "0.00", miscAllow: "0.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, dob: null, doj: null, mobile: null, aadharNo: null, address: null, bankName: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+  { id: "cw-6", code: "CW-006", name: "Ravi Shankar", fatherHusbandName: null, category: null, designation: null, clientId: "client-1", basicSalary: "19000.00", hra: "0.00", ta: "0.00", medicalAllow: "0.00", cea: "0.00", miscAllow: "0.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, dob: null, doj: null, mobile: null, aadharNo: null, address: null, bankName: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+  { id: "cw-7", code: "CW-007", name: "Sunita Devi", fatherHusbandName: null, category: null, designation: null, clientId: "client-1", basicSalary: "15000.00", hra: "0.00", ta: "0.00", medicalAllow: "0.00", cea: "0.00", miscAllow: "0.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, dob: null, doj: null, mobile: null, aadharNo: null, address: null, bankName: null, status: "INACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-03-15T00:00:00.000Z" },
 ];
 
 export const inHouseEmployees: InHouseEmployee[] = [
@@ -108,13 +108,13 @@ MONTHS.forEach(({ month, year }, monthIndex) => {
   );
 
   const contractLineInputs = activeContractWorkers.map((worker, workerIndex) => {
-    if (isJune2026 && worker.id === "cw-1") return { workingDays: 23, otHours: 58, advance: 1000 };
-    if (isJune2026 && worker.id === "cw-2") return { workingDays: 18, otHours: 51, advance: 5000 };
-    if (isJune2026 && worker.id === "cw-3") return { workingDays: 3, otHours: 1, advance: 0 };
-    const workingDays = 20 + ((workerIndex + monthIndex) % 6);
+    if (isJune2026 && worker.id === "cw-1") return { actualPresentDays: 23, weekOffHoliday: 0, otHours: 58, advance: 1000 };
+    if (isJune2026 && worker.id === "cw-2") return { actualPresentDays: 18, weekOffHoliday: 0, otHours: 51, advance: 5000 };
+    if (isJune2026 && worker.id === "cw-3") return { actualPresentDays: 3, weekOffHoliday: 0, otHours: 1, advance: 0 };
+    const actualPresentDays = 20 + ((workerIndex + monthIndex) % 6);
     const otHours = (workerIndex * 7 + monthIndex * 3) % 40;
     const advance = monthIndex % 3 === 0 && workerIndex % 2 === 0 ? 1000 * (workerIndex + 1) : 0;
-    return { workingDays, otHours, advance };
+    return { actualPresentDays, weekOffHoliday: 0, otHours, advance };
   });
 
   payrollRuns.push({
@@ -130,26 +130,48 @@ MONTHS.forEach(({ month, year }, monthIndex) => {
   });
 
   const monthDays = daysInMonth(month, year);
-  activeContractWorkers.forEach((worker, i) => {
+  const contractResults = activeContractWorkers.map((worker, i) => {
     const input = contractLineInputs[i]!;
     const wageInput = { basicSalary: Number(worker.basicSalary), monthDays, ...input };
-    const result = calculateWageLine(wageInput);
+    return calculateWageLine(wageInput);
+  });
+  activeContractWorkers.forEach((worker, i) => {
+    const input = contractLineInputs[i]!;
+    const result = contractResults[i]!;
     payrollLines.push({
       id: `line-${contractRunId}-${worker.id}`,
       payrollRunId: contractRunId,
       contractWorkerId: worker.id,
       inHouseEmployeeId: null,
-      workingDays: num(input.workingDays),
+      actualPresentDays: num(input.actualPresentDays),
+      weekOffHoliday: num(input.weekOffHoliday),
+      workingDays: num(result.workingDays),
       otHours: num(input.otHours),
       basicEarn: num(result.basicEarn),
+      hraEarn: num(result.hraEarn),
+      taEarn: num(result.taEarn),
+      medicalEarn: num(result.medicalEarn),
+      ceaEarn: num(result.ceaEarn),
+      miscEarn: num(result.miscEarn),
       otAmount: num(result.otAmount),
+      incentiveAllowRate: "0.00",
+      incentive: num(result.incentive),
+      attendAward: num(result.attendAward),
+      nightCount: "0.00",
+      nightAllowance: num(result.nightAllowance),
+      otArrear: num(result.otArrear),
       grossEarning: num(result.grossEarning),
       pf: num(result.pf),
       esic: num(result.esic),
+      employerEsic: num(result.employerEsic),
+      otEsic: num(result.otEsic),
       lwf: num(result.lwf),
       advance: num(result.advance),
-      bonus: "0.00",
-      incentive: "0.00",
+      tds: num(result.tds),
+      otherDeduction: num(result.otherDeduction),
+      leaveEncashment: num(result.leaveEncashment),
+      arrears: num(result.arrears),
+      bonus: num(result.bonus),
       totalDeduction: num(result.totalDeduction),
       netPayable: num(result.netPayable),
       createdAt: `${year}-${String(month).padStart(2, "0")}-28T00:00:00.000Z`,
@@ -159,8 +181,14 @@ MONTHS.forEach(({ month, year }, monthIndex) => {
 
   if (!isLatest) {
     // Bill only for finalized runs.
-    const wageTotals = sumWageLines(activeContractWorkers.map((w, i) => ({ basicSalary: Number(w.basicSalary), monthDays, ...contractLineInputs[i]! })));
-    const bill = calculateBill({ basicWages: wageTotals.basicEarn, incentiveAmt: wageTotals.otAmount });
+    const bill = calculateBill({
+      workerBasicEarnings: contractResults.map((r) => r.basicEarn),
+      workerHraEarnings: contractResults.map((r) => r.hraEarn),
+      otAmount: contractResults.reduce((sum, r) => sum + r.otAmount, 0),
+      attendAward: contractResults.reduce((sum, r) => sum + r.attendAward, 0),
+      incentiveAmt: contractResults.reduce((sum, r) => sum + r.incentive, 0),
+      lwf: contractResults.reduce((sum, r) => sum + r.lwf, 0) * 2,
+    });
     const billId = `bill-${year}-${month}`;
     const billNo = String(billCounter++).padStart(3, "0");
     bills.push({
@@ -179,14 +207,15 @@ MONTHS.forEach(({ month, year }, monthIndex) => {
       billId,
       basicWages: num(bill.basicWages),
       hra: num(bill.hra),
-      con: num(bill.con),
+      otAmount: num(bill.otAmount),
+      attendAward: num(bill.attendAward),
       incentiveAmt: num(bill.incentiveAmt),
       total1: num(bill.total1),
       esiEmployer: num(bill.esiEmployer),
-      esiEmployee: num(bill.esiEmployee),
-      lwf1: num(bill.lwf1),
+      pfBase: num(bill.pfBase),
+      pfEmployer: num(bill.pfEmployer),
+      lwf: num(bill.lwf),
       serviceCharge: num(bill.serviceCharge),
-      lwf2: num(bill.lwf2),
       total2: num(bill.total2),
       cgst: num(bill.cgst),
       sgst: num(bill.sgst),
@@ -222,17 +251,35 @@ MONTHS.forEach(({ month, year }, monthIndex) => {
       payrollRunId: inHouseRunId,
       contractWorkerId: null,
       inHouseEmployeeId: employee.id,
+      actualPresentDays: "0.00",
+      weekOffHoliday: "0.00",
       workingDays: num(30 - unpaidLeaveDays),
       otHours: "0.00",
       basicEarn: num(Number(employee.basicSalary) - result.leaveDeduction),
+      hraEarn: "0.00",
+      taEarn: "0.00",
+      medicalEarn: "0.00",
+      ceaEarn: "0.00",
+      miscEarn: "0.00",
       otAmount: "0.00",
+      incentiveAllowRate: "0.00",
+      incentive: num(result.incentive),
+      attendAward: "0.00",
+      nightCount: "0.00",
+      nightAllowance: "0.00",
+      otArrear: "0.00",
       grossEarning: num(result.grossEarning),
       pf: num(result.pf),
       esic: num(result.esic),
+      employerEsic: "0.00",
+      otEsic: "0.00",
       lwf: num(result.lwf),
       advance: "0.00",
+      tds: "0.00",
+      otherDeduction: "0.00",
+      leaveEncashment: "0.00",
+      arrears: "0.00",
       bonus: num(result.bonus),
-      incentive: num(result.incentive),
       totalDeduction: num(result.totalDeduction),
       netPayable: num(result.netPayable),
       createdAt: `${year}-${String(month).padStart(2, "0")}-28T00:00:00.000Z`,

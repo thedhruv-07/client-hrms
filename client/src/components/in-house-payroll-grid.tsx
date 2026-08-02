@@ -147,7 +147,7 @@ export function InHousePayrollGrid({ month, year }: { month: number; year: numbe
                     min={0}
                     step="1"
                     className="figure ml-auto h-8 w-20 text-right"
-                    value={row.unpaidLeaveDays}
+                    value={row.unpaidLeaveDays === 0 ? "" : row.unpaidLeaveDays}
                     onChange={(e) => updateRow(row.employeeId, { unpaidLeaveDays: Number(e.target.value) })}
                   />
                 </TableCell>
@@ -157,7 +157,7 @@ export function InHousePayrollGrid({ month, year }: { month: number; year: numbe
                     min={0}
                     step="1"
                     className="figure ml-auto h-8 w-24 text-right"
-                    value={row.bonus}
+                    value={row.bonus === 0 ? "" : row.bonus}
                     onChange={(e) => updateRow(row.employeeId, { bonus: Number(e.target.value) })}
                   />
                 </TableCell>
@@ -167,7 +167,7 @@ export function InHousePayrollGrid({ month, year }: { month: number; year: numbe
                     min={0}
                     step="1"
                     className="figure ml-auto h-8 w-24 text-right"
-                    value={row.incentive}
+                    value={row.incentive === 0 ? "" : row.incentive}
                     onChange={(e) => updateRow(row.employeeId, { incentive: Number(e.target.value) })}
                   />
                 </TableCell>
@@ -177,7 +177,7 @@ export function InHousePayrollGrid({ month, year }: { month: number; year: numbe
                     min={0}
                     step="1"
                     className="figure ml-auto h-8 w-24 text-right"
-                    value={row.advance}
+                    value={row.advance === 0 ? "" : row.advance}
                     onChange={(e) => updateRow(row.employeeId, { advance: Number(e.target.value) })}
                   />
                 </TableCell>

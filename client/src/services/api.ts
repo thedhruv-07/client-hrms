@@ -69,4 +69,16 @@ export const api = {
     }
     return res.blob();
   },
+  /** For binary GET responses (PDF, etc.). */
+  getBlob: async (path: string): Promise<Blob> => {
+    const token = getStoredToken();
+    const res = await fetch(`${BASE_URL}${path}`, {
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new ApiRequestError(res.status, errBody);
+    }
+    return res.blob();
+  },
 };

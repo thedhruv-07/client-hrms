@@ -77,21 +77,42 @@ model Client {
 }
 
 model ContractWorker {
-  id           String       @id @default(cuid())
-  code         String       @unique
-  name         String
+  id                String       @id @default(cuid())
+  code              String       @unique
+  name              String
+  fatherHusbandName String?
+  /// "CATOGERY" in the source sheet (verbatim spelling kept for the Excel export's header).
+  category          String?
+  designation       String?
   /// Which client this worker is deployed at — one client per worker.
-  clientId     String
-  client       Client       @relation(fields: [clientId], references: [id])
-  basicSalary  Decimal      @db.Decimal(12, 2)
-  bankAccount  String?
-  ifsc         String?
-  pfNo         String?
-  esicNo       String?
-  uan          String?
-  status       WorkerStatus @default(ACTIVE)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  clientId          String
+  client            Client       @relation(fields: [clientId], references: [id])
+  basicSalary       Decimal      @db.Decimal(12, 2)
+  /// Monthly HRA rate, prorated by attendance same as basicSalary. Defaults to 0 — not every worker/client draws HRA.
+  hra               Decimal      @default(0) @db.Decimal(12, 2)
+  /// Monthly Travel Allowance rate, prorated same as basicSalary. Defaults to 0.
+  ta                Decimal      @default(0) @db.Decimal(12, 2)
+  /// Monthly Medical Allowance rate, prorated same as basicSalary. Defaults to 0.
+  medicalAllow      Decimal      @default(0) @db.Decimal(12, 2)
+  /// Monthly Children Education Allowance rate, prorated same as basicSalary. Defaults to 0.
+  cea               Decimal      @default(0) @db.Decimal(12, 2)
+  /// Monthly Misc. Allowance rate, prorated same as basicSalary (rounded to the rupee, matching the source sheet). Defaults to 0.
+  miscAllow         Decimal      @default(0) @db.Decimal(12, 2)
+  bankAccount       String?
+  ifsc              String?
+  pfNo              String?
+  esicNo            String?
+  uan               String?
+  /// Identity/bank fields from the bulk-import sheet (Employee Details) — informational only, never on PayrollLine or the wage-sheet exports.
+  dob               DateTime?
+  doj               DateTime?
+  mobile            String?
+  aadharNo          String?
+  address           String?
+  bankName          String?
+  status            WorkerStatus @default(ACTIVE)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   payrollLines PayrollLine[]
 }
@@ -144,29 +165,66 @@ model PayrollRun {
 /// Mirrors the wage-sheet row exactly. One row type serves both modules —
 /// exactly one of contractWorkerId / inHouseEmployeeId is set per row.
 model PayrollLine {
-  id               String  @id @default(cuid())
-  payrollRunId     String
-  payrollRun       PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
-  contractWorkerId String?
-  contractWorker   ContractWorker?  @relation(fields: [contractWorkerId], references: [id])
+  id                String           @id @default(cuid())
+  payrollRunId      String
+  payrollRun        PayrollRun       @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  contractWorkerId  String?
+  contractWorker    ContractWorker?  @relation(fields: [contractWorkerId], references: [id])
   inHouseEmployeeId String?
-  inHouseEmployee  InHouseEmployee? @relation(fields: [inHouseEmployeeId], references: [id])
+  inHouseEmployee   InHouseEmployee? @relation(fields: [inHouseEmployeeId], references: [id])
 
-  workingDays     Decimal @db.Decimal(5, 2)
-  otHours         Decimal @default(0) @db.Decimal(6, 2)
-  basicEarn       Decimal @db.Decimal(12, 2)
-  otAmount        Decimal @default(0) @db.Decimal(12, 2)
-  grossEarning    Decimal @db.Decimal(12, 2)
-  pf              Decimal @default(0) @db.Decimal(12, 2)
-  esic            Decimal @default(0) @db.Decimal(12, 2)
-  lwf             Decimal @default(0) @db.Decimal(12, 2)
-  advance         Decimal @default(0) @db.Decimal(12, 2)
-  /// In-house only.
-  bonus           Decimal @default(0) @db.Decimal(12, 2)
-  /// In-house only.
-  incentive       Decimal @default(0) @db.Decimal(12, 2)
-  totalDeduction  Decimal @db.Decimal(12, 2)
-  netPayable      Decimal @db.Decimal(12, 2)
+  /// Contract only — manual input; workingDays = actualPresentDays + weekOffHoliday.
+  actualPresentDays  Decimal @default(0) @db.Decimal(5, 2)
+  /// Contract only — manual input.
+  weekOffHoliday     Decimal @default(0) @db.Decimal(5, 2)
+  workingDays        Decimal @db.Decimal(5, 2)
+  otHours            Decimal @default(0) @db.Decimal(6, 2)
+  basicEarn          Decimal @db.Decimal(12, 2)
+  /// Contract only — HRA earned, prorated same as basicEarn.
+  hraEarn            Decimal @default(0) @db.Decimal(12, 2)
+  /// Contract only — TA earned, prorated same as basicEarn.
+  taEarn             Decimal @default(0) @db.Decimal(12, 2)
+  /// Contract only — Medical Allowance earned, prorated same as basicEarn.
+  medicalEarn        Decimal @default(0) @db.Decimal(12, 2)
+  /// Contract only — CEA earned, prorated same as basicEarn.
+  ceaEarn            Decimal @default(0) @db.Decimal(12, 2)
+  /// Contract only — Misc. Allowance earned, prorated same as basicEarn (rounded to the rupee, matching the source sheet).
+  miscEarn           Decimal @default(0) @db.Decimal(12, 2)
+  /// Contract only — paid at double the per-hour basic rate.
+  otAmount           Decimal @default(0) @db.Decimal(12, 2)
+  /// Contract only — manual monthly rate; incentive is prorated from this the same way basicEarn is from basicSalary.
+  incentiveAllowRate Decimal @default(0) @db.Decimal(12, 2)
+  /// In-house: manual flat bonus/incentive amount. Contract: prorated from incentiveAllowRate.
+  incentive          Decimal @default(0) @db.Decimal(12, 2)
+  /// Contract only — manual flat amount, not prorated.
+  attendAward        Decimal @default(0) @db.Decimal(12, 2)
+  /// Contract only — informational count, not used in any formula.
+  nightCount         Decimal @default(0) @db.Decimal(5, 2)
+  /// Contract only — manual flat amount, feeds the OT stream's Gross Payable.
+  nightAllowance     Decimal @default(0) @db.Decimal(12, 2)
+  /// Contract only — manual flat amount, prior-period correction feeding the OT stream's Total Gross Payable.
+  otArrear           Decimal @default(0) @db.Decimal(12, 2)
+  grossEarning       Decimal @db.Decimal(12, 2)
+  pf                 Decimal @default(0) @db.Decimal(12, 2)
+  esic               Decimal @default(0) @db.Decimal(12, 2)
+  /// Contract only — Employer's own ESIC contribution @ 3.25% of Gross Wages Ernd — informational/compliance, not billed to the client (the bill computes its own reimbursement separately).
+  employerEsic       Decimal @default(0) @db.Decimal(12, 2)
+  /// Contract only — ESIC deduction on the OT/incentive/attendance-award/night-allowance stream, separate from the main `esic` deduction on basic+HRA+allowances.
+  otEsic             Decimal @default(0) @db.Decimal(12, 2)
+  lwf                Decimal @default(0) @db.Decimal(12, 2)
+  advance            Decimal @default(0) @db.Decimal(12, 2)
+  /// Contract only — manual entry.
+  tds                Decimal @default(0) @db.Decimal(12, 2)
+  /// Contract only — manual entry.
+  otherDeduction     Decimal @default(0) @db.Decimal(12, 2)
+  /// Contract only — manual entry, added to net payable.
+  leaveEncashment    Decimal @default(0) @db.Decimal(12, 2)
+  /// Contract only — manual entry, added to net payable ("Arrears / Suspension Allow / Advance Paid Against Salary").
+  arrears            Decimal @default(0) @db.Decimal(12, 2)
+  /// In-house: manual flat bonus. Contract: "Bonus & Diwali", also manual.
+  bonus              Decimal @default(0) @db.Decimal(12, 2)
+  totalDeduction     Decimal @db.Decimal(12, 2)
+  netPayable         Decimal @db.Decimal(12, 2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -174,17 +232,17 @@ model PayrollLine {
 
 /// A client GST bill for one month of contract labour.
 model Bill {
-  id           String   @id @default(cuid())
+  id           String     @id @default(cuid())
   clientId     String
-  client       Client   @relation(fields: [clientId], references: [id])
+  client       Client     @relation(fields: [clientId], references: [id])
   payrollRunId String
   payrollRun   PayrollRun @relation(fields: [payrollRunId], references: [id])
-  billNo       String   @unique
+  billNo       String     @unique
   billDate     DateTime
   month        Int
   year         Int
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   line BillLine?
 }
@@ -197,16 +255,20 @@ model BillLine {
 
   basicWages    Decimal @db.Decimal(12, 2)
   hra           Decimal @default(0) @db.Decimal(12, 2)
-  con           Decimal @default(0) @db.Decimal(12, 2)
-  /// Labeled "INCENTIVE AMT." on the printed bill; actually the OT total (Table 1 OT column) — kept for continuity with bills already issued.
+  /// OT total from the wage register (Table 1 OT column).
+  otAmount      Decimal @default(0) @db.Decimal(12, 2)
+  attendAward   Decimal @default(0) @db.Decimal(12, 2)
   incentiveAmt  Decimal @default(0) @db.Decimal(12, 2)
   total1        Decimal @db.Decimal(12, 2)
+  /// Employer's ESIC reimbursement @ 3.25% of Sub Total.
   esiEmployer   Decimal @db.Decimal(12, 2)
-  esiEmployee   Decimal @db.Decimal(12, 2)
-  lwf1          Decimal @db.Decimal(12, 2)
+  /// The EPFO wage-ceiling-capped basic that pfEmployer's 13% is computed on — shown as the PF row's "Chargeable Amount" on the printed invoice, distinct from Sub Total.
+  pfBase        Decimal @default(0) @db.Decimal(12, 2)
+  /// Employer's PF reimbursement @ 13% of pfBase (not Sub Total).
+  pfEmployer    Decimal @db.Decimal(12, 2)
+  /// Labour Welfare Fund — flat statutory amount, entered per bill (no universal formula across states).
+  lwf           Decimal @default(0) @db.Decimal(12, 2)
   serviceCharge Decimal @db.Decimal(12, 2)
-  /// Second LWF calc (0.2% of basicWages, x2) — distinct base/multiplier from lwf1, not a duplicate.
-  lwf2          Decimal @db.Decimal(12, 2)
   total2        Decimal @db.Decimal(12, 2)
   cgst          Decimal @db.Decimal(12, 2)
   sgst          Decimal @db.Decimal(12, 2)

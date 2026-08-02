@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Download } from "lucide-react";
-import { getBill } from "@/services/bills";
+import { getBill, downloadBillPdf } from "@/services/bills";
 import { getCompany } from "@/services/company";
 import { downloadBill } from "@/lib/exportExcel";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,6 +27,7 @@ export function BillDetailPage() {
   const { data: bill, isLoading } = useQuery({ queryKey: ["bill", id], queryFn: () => getBill(id!), enabled: !!id });
   const { data: company } = useQuery({ queryKey: ["company"], queryFn: getCompany });
   const [downloading, setDownloading] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   async function onDownload() {
     if (!bill?.line || !company) return;
@@ -42,14 +43,15 @@ export function BillDetailPage() {
         line: {
           basicWages: Number(bill.line.basicWages),
           hra: Number(bill.line.hra),
-          con: Number(bill.line.con),
+          otAmount: Number(bill.line.otAmount),
+          attendAward: Number(bill.line.attendAward),
           incentiveAmt: Number(bill.line.incentiveAmt),
           total1: Number(bill.line.total1),
           esiEmployer: Number(bill.line.esiEmployer),
-          esiEmployee: Number(bill.line.esiEmployee),
-          lwf1: Number(bill.line.lwf1),
+          pfBase: Number(bill.line.pfBase),
+          pfEmployer: Number(bill.line.pfEmployer),
+          lwf: Number(bill.line.lwf),
           serviceCharge: Number(bill.line.serviceCharge),
-          lwf2: Number(bill.line.lwf2),
           total2: Number(bill.line.total2),
           cgst: Number(bill.line.cgst),
           sgst: Number(bill.line.sgst),
@@ -63,6 +65,18 @@ export function BillDetailPage() {
     }
   }
 
+  async function onDownloadPdf() {
+    if (!bill?.line) return;
+    setDownloadingPdf(true);
+    try {
+      await downloadBillPdf(bill.id, bill.billNo);
+    } catch {
+      toast({ title: "Could not generate the PDF", variant: "destructive" });
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -71,10 +85,16 @@ export function BillDetailPage() {
           Back to Bills
         </Link>
         {bill?.line ? (
-          <Button onClick={onDownload} disabled={downloading || !company}>
-            <Download className="size-4" />
-            {downloading ? "Preparing…" : "Download (.xlsx)"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={onDownloadPdf} disabled={downloadingPdf} variant="outline">
+              <Download className="size-4" />
+              {downloadingPdf ? "Preparing…" : "Download (.pdf)"}
+            </Button>
+            <Button onClick={onDownload} disabled={downloading || !company}>
+              <Download className="size-4" />
+              {downloading ? "Preparing…" : "Download (.xlsx)"}
+            </Button>
+          </div>
         ) : null}
       </div>
 
@@ -103,21 +123,21 @@ function BillLines({ line }: { line: BillLine }) {
   const amt = (v: string) => formatCurrencyPrecise(Number(v));
   return (
     <div className="flex flex-col">
-      <LineRow label="Basic Wages" value={amt(line.basicWages)} />
+      <LineRow label="Basic" value={amt(line.basicWages)} />
       <LineRow label="HRA" value={amt(line.hra)} />
-      <LineRow label="CON." value={amt(line.con)} />
-      <LineRow label='Incentive Amt. (OT total — see PROJECT_SPEC.md §2 on this label)' value={amt(line.incentiveAmt)} />
-      <LineRow label="Total (1)" value={amt(line.total1)} emphasis />
+      <LineRow label="OT Amount" value={amt(line.otAmount)} />
+      <LineRow label="Attend. Award" value={amt(line.attendAward)} />
+      <LineRow label="Incentive Amt." value={amt(line.incentiveAmt)} />
+      <LineRow label="Sub Total" value={amt(line.total1)} emphasis />
       <div className="h-2" />
-      <LineRow label="ESI @ 3.25% on Total (1)" value={amt(line.esiEmployer)} />
-      <LineRow label="ESI @ 0.75% on Total (1)" value={amt(line.esiEmployee)} />
-      <LineRow label="L.W.F @ 0.25% on Total (1)" value={amt(line.lwf1)} />
-      <LineRow label="Service Charges @ 7% on Total (1)" value={amt(line.serviceCharge)} />
-      <LineRow label="Labour Welfare Fund @ 0.2% x2 (Person)" value={amt(line.lwf2)} />
-      <LineRow label="Total (2)" value={amt(line.total2)} emphasis />
+      <LineRow label="Reimb. Employer's ESIC Contribution @ 3.25%" value={amt(line.esiEmployer)} />
+      <LineRow label="Reimb. Employer's PF Contribution @ 13%" value={amt(line.pfEmployer)} />
+      <LineRow label="Reimb. Labour Welfare Fund" value={amt(line.lwf)} />
+      <LineRow label="Service Charges @ 5%" value={amt(line.serviceCharge)} />
+      <LineRow label="Taxable Amount" value={amt(line.total2)} emphasis />
       <div className="h-2" />
-      <LineRow label="CGST @ 9% on Total (2)" value={amt(line.cgst)} />
-      <LineRow label="SGST @ 9% on Total (2)" value={amt(line.sgst)} />
+      <LineRow label="CGST @ 9%" value={amt(line.cgst)} />
+      <LineRow label="SGST @ 9%" value={amt(line.sgst)} />
       <div className="mt-2 flex items-center justify-between rounded-sm border-2 border-foreground/60 px-3 py-2.5 text-base font-semibold">
         <span>Grand Total</span>
         <span className="figure">{amt(line.grandTotal)}</span>

@@ -55,13 +55,34 @@ export interface ContractWorker {
   id: string;
   code: string;
   name: string;
+  fatherHusbandName: string | null;
+  /** "CATOGERY" in the source sheet (verbatim spelling kept for the Excel export's header). */
+  category: string | null;
+  designation: string | null;
   clientId: string;
   basicSalary: string;
+  /** Monthly HRA rate, prorated by attendance same as basicSalary. Defaults to 0. */
+  hra: string;
+  /** Monthly Travel Allowance rate, prorated same as basicSalary. Defaults to 0. */
+  ta: string;
+  /** Monthly Medical Allowance rate, prorated same as basicSalary. Defaults to 0. */
+  medicalAllow: string;
+  /** Monthly Children Education Allowance rate, prorated same as basicSalary. Defaults to 0. */
+  cea: string;
+  /** Monthly Misc. Allowance rate, prorated same as basicSalary. Defaults to 0. */
+  miscAllow: string;
   bankAccount: string | null;
   ifsc: string | null;
   pfNo: string | null;
   esicNo: string | null;
   uan: string | null;
+  /** Identity/bank fields from the bulk-import sheet — informational only, never on PayrollLine or the wage-sheet exports. */
+  dob: string | null;
+  doj: string | null;
+  mobile: string | null;
+  aadharNo: string | null;
+  address: string | null;
+  bankName: string | null;
   status: WorkerStatus;
   createdAt: string;
   updatedAt: string;
@@ -112,19 +133,55 @@ export interface PayrollLine {
   payrollRunId: string;
   contractWorkerId: string | null;
   inHouseEmployeeId: string | null;
+  /** Contract only — manual input; workingDays = actualPresentDays + weekOffHoliday. */
+  actualPresentDays: string;
+  /** Contract only — manual input. */
+  weekOffHoliday: string;
   workingDays: string;
   otHours: string;
   basicEarn: string;
+  /** Contract only — HRA earned, prorated same as basicEarn. */
+  hraEarn: string;
+  /** Contract only — TA earned, prorated same as basicEarn. */
+  taEarn: string;
+  /** Contract only — Medical Allowance earned, prorated same as basicEarn. */
+  medicalEarn: string;
+  /** Contract only — CEA earned, prorated same as basicEarn. */
+  ceaEarn: string;
+  /** Contract only — Misc. Allowance earned, prorated same as basicEarn (rounded to the rupee). */
+  miscEarn: string;
   otAmount: string;
+  /** Contract only — manual monthly rate; incentive is prorated from this the same way basicEarn is from basicSalary. */
+  incentiveAllowRate: string;
+  /** In-house: manual flat bonus/incentive amount. Contract: prorated from incentiveAllowRate. */
+  incentive: string;
+  /** Contract only — manual flat amount, not prorated. */
+  attendAward: string;
+  /** Contract only — informational count, not used in any formula. */
+  nightCount: string;
+  /** Contract only — manual flat amount, feeds the OT stream's Gross Payable. */
+  nightAllowance: string;
+  /** Contract only — manual flat amount, prior-period correction feeding the OT stream's Total Gross Payable. */
+  otArrear: string;
   grossEarning: string;
   pf: string;
   esic: string;
+  /** Contract only — Employer's own ESIC contribution @ 3.25%, informational/compliance. */
+  employerEsic: string;
+  /** Contract only — ESIC deduction on the OT/night-allowance/incentive/attendance-award stream, separate from `esic`. */
+  otEsic: string;
   lwf: string;
   advance: string;
-  /** In-house only. */
+  /** Contract only — manual entry. */
+  tds: string;
+  /** Contract only — manual entry. */
+  otherDeduction: string;
+  /** Contract only — manual entry, added to net payable. */
+  leaveEncashment: string;
+  /** Contract only — manual entry, added to net payable. */
+  arrears: string;
+  /** In-house: manual flat bonus. Contract: "Bonus & Diwali", also manual. */
   bonus: string;
-  /** In-house only. */
-  incentive: string;
   totalDeduction: string;
   netPayable: string;
   createdAt: string;
@@ -150,16 +207,19 @@ export interface BillLine {
   billId: string;
   basicWages: string;
   hra: string;
-  con: string;
-  /** Labeled "INCENTIVE AMT." on the printed bill; actually the OT total. */
+  /** OT total from the wage register. */
+  otAmount: string;
+  attendAward: string;
   incentiveAmt: string;
   total1: string;
+  /** Employer's ESIC reimbursement @ 3.25% of Sub Total. */
   esiEmployer: string;
-  esiEmployee: string;
-  lwf1: string;
+  /** The EPF-wage-ceiling-capped basic that pfEmployer's 13% is computed on — distinct from Sub Total. */
+  pfBase: string;
+  pfEmployer: string;
+  /** Labour Welfare Fund — flat statutory amount. */
+  lwf: string;
   serviceCharge: string;
-  /** Second LWF calc (0.2% of basicWages, x2) — distinct from lwf1, not a duplicate. */
-  lwf2: string;
   total2: string;
   cgst: string;
   sgst: string;

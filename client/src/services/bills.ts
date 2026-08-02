@@ -1,5 +1,6 @@
 import type { Bill, BillLine, Client } from "@/types";
 import { api, ApiRequestError } from "./api";
+import { downloadBlob } from "@/lib/exportExcel";
 
 export interface BillWithLine extends Bill {
   client: Client;
@@ -22,4 +23,9 @@ export async function getBill(id: string): Promise<BillWithLine | null> {
 /** Sums the period's contract wage register (basicEarn, otAmount) server-side and bills it. */
 export async function generateBill(month: number, year: number, clientId: string): Promise<BillWithLine> {
   return api.post<BillWithLine>("/bills/generate", { month, year, clientId });
+}
+
+export async function downloadBillPdf(id: string, billNo: string): Promise<void> {
+  const blob = await api.getBlob(`/bills/${id}/pdf`);
+  downloadBlob(blob, `bill-${billNo}.pdf`);
 }

@@ -1,6 +1,4 @@
-import puppeteer from "puppeteer-core";
-import chromium from "@sparticuz/chromium";
-import fs from "node:fs";
+import { renderHtmlToPdf } from "../lib/puppeteer";
 
 export interface SalarySlipLine {
   label: string;
@@ -168,7 +166,8 @@ function renderSlipSection(data: SalarySlipData, isLast: boolean): string {
 
 const STYLES = `
   * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #111; margin: 0; }
+  html { color-scheme: light; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #111; background: #fff; margin: 0; }
   .slip { padding: 32px; }
   .sig-row { display: flex; justify-content: space-between; font-size: 10px; color: #666; border-bottom: 1px solid #ddd; padding-bottom: 6px; margin-bottom: 12px; }
   .sig-row-footer { border-bottom: none; border-top: 1px solid #ddd; margin-top: 16px; padding-top: 6px; margin-bottom: 0; }
@@ -202,39 +201,8 @@ function renderDocumentHtml(slips: SalarySlipData[]): string {
   return `<!doctype html><html><head><meta charset="utf-8"><style>${STYLES}</style></head><body>${body}</body></html>`;
 }
 
-/**
- * Local Chrome first (fast, no extraction step, what dev machines already have).
- * Falls back to @sparticuz/chromium's bundled serverless binary when none is found —
- * covers containers/PaaS like Render that don't have Chrome preinstalled.
- */
-async function resolveLaunchOptions(): Promise<{ executablePath: string; args: string[] }> {
-  const fromEnv = process.env["PUPPETEER_EXECUTABLE_PATH"];
-  if (fromEnv) return { executablePath: fromEnv, args: [] };
-
-  const candidates = [
-    "C:/Program Files/Google/Chrome/Application/chrome.exe",
-    "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
-    "/usr/bin/google-chrome",
-    "/usr/bin/chromium-browser",
-  ];
-  const found = candidates.find((p) => fs.existsSync(p));
-  if (found) return { executablePath: found, args: [] };
-
-  return { executablePath: await chromium.executablePath(), args: chromium.args };
-}
-
 /** One PDF, one page per slip (page-break-after between sections) — used for both a single slip and a batch download. */
 export async function generateSalarySlipsPdf(slips: SalarySlipData[]): Promise<Buffer> {
   if (slips.length === 0) throw new Error("generateSalarySlipsPdf requires at least one slip");
-
-  const { executablePath, args } = await resolveLaunchOptions();
-  const browser = await puppeteer.launch({ executablePath, args, headless: true });
-  try {
-    const page = await browser.newPage();
-    await page.setContent(renderDocumentHtml(slips), { waitUntil: "load" });
-    const pdf = await page.pdf({ format: "A4", printBackground: true });
-    return Buffer.from(pdf);
-  } finally {
-    await browser.close();
-  }
+  return renderHtmlToPdf(renderDocumentHtml(slips));
 }

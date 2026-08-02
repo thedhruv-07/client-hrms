@@ -5,6 +5,12 @@ import { requireAuth, requireRole } from "../middleware/auth";
 import { logAudit } from "../lib/audit";
 import { queryString } from "../lib/query";
 import { calculateBill } from "../engine/bill";
+import { generateBillPdf } from "../export/billPdf";
+
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+function monthLabel(month: number, year: number): string {
+  return `${MONTH_NAMES[month - 1] ?? ""} ${year}`;
+}
 
 export const billsRouter = Router();
 
@@ -62,6 +68,74 @@ billsRouter.get("/:id", async (req, res) => {
   res.json(bill);
 });
 
+/**
+ * @openapi
+ * /bills/{id}/pdf:
+ *   get:
+ *     tags: [Bills]
+ *     summary: Render a bill as a printable tax-invoice PDF
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: PDF file, content: { application/pdf: { schema: { type: string, format: binary } } } }
+ *       401: { description: Missing or invalid token }
+ *       404: { description: Bill not found, or has no line items yet }
+ */
+billsRouter.get("/:id/pdf", async (req, res) => {
+  const bill = await prisma.bill.findUnique({
+    where: { id: req.params["id"] },
+    include: { client: true, line: true },
+  });
+  if (!bill || !bill.line) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const company = (await prisma.company.findFirst()) ?? { name: "", address: "", mobile: null, gstNo: null, panNo: null, pfCode: null, esiCode: null };
+
+  const pdf = await generateBillPdf({
+    companyName: company.name,
+    companyAddress: company.address,
+    companyMobile: company.mobile,
+    companyGstNo: company.gstNo,
+    companyPanNo: company.panNo,
+    companyPfCode: company.pfCode,
+    companyEsiCode: company.esiCode,
+    clientName: bill.client.name,
+    clientAddress: bill.client.address,
+    clientGstNo: bill.client.gstNo,
+    clientPanNo: bill.client.panNo,
+    clientHsnSac: bill.client.hsnSac,
+    billNo: bill.billNo,
+    billDate: bill.billDate.toISOString(),
+    monthLabel: monthLabel(bill.month, bill.year),
+    line: {
+      basicWages: Number(bill.line.basicWages),
+      hra: Number(bill.line.hra),
+      otAmount: Number(bill.line.otAmount),
+      attendAward: Number(bill.line.attendAward),
+      incentiveAmt: Number(bill.line.incentiveAmt),
+      total1: Number(bill.line.total1),
+      esiEmployer: Number(bill.line.esiEmployer),
+      pfBase: Number(bill.line.pfBase),
+      pfEmployer: Number(bill.line.pfEmployer),
+      lwf: Number(bill.line.lwf),
+      serviceCharge: Number(bill.line.serviceCharge),
+      total2: Number(bill.line.total2),
+      cgst: Number(bill.line.cgst),
+      sgst: Number(bill.line.sgst),
+      grandTotal: Number(bill.line.grandTotal),
+    },
+  });
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="bill-${bill.billNo}.pdf"`);
+  res.send(pdf);
+});
+
 export const generateSchema = z.object({
   month: z.number().int().min(1).max(12),
   year: z.number().int(),
@@ -116,9 +190,14 @@ billsRouter.post("/generate", requireRole("ADMIN", "HR", "ACCOUNTANT"), async (r
     return;
   }
 
-  const basicWages = run.lines.reduce((sum, l) => sum + Number(l.basicEarn), 0);
-  const incentiveAmt = run.lines.reduce((sum, l) => sum + Number(l.otAmount), 0);
-  const result = calculateBill({ basicWages, incentiveAmt });
+  const workerBasicEarnings = run.lines.map((l) => Number(l.basicEarn));
+  const workerHraEarnings = run.lines.map((l) => Number(l.hraEarn));
+  const otAmount = run.lines.reduce((sum, l) => sum + Number(l.otAmount), 0);
+  const attendAward = run.lines.reduce((sum, l) => sum + Number(l.attendAward), 0);
+  const incentiveAmt = run.lines.reduce((sum, l) => sum + Number(l.incentive), 0);
+  // The bill's LWF reimbursement is 2x the wage register's own total employee Welfare deductions.
+  const lwf = run.lines.reduce((sum, l) => sum + Number(l.lwf), 0) * 2;
+  const result = calculateBill({ workerBasicEarnings, workerHraEarnings, otAmount, attendAward, incentiveAmt, lwf });
 
   const existing = await prisma.bill.findFirst({ where: { payrollRunId: run.id, clientId } });
 

@@ -22,8 +22,11 @@ test("createSchema rejects a missing clientId", () => {
   assert.equal(result.success, false);
 });
 
-test("createSchema rejects zero or negative basicSalary", () => {
-  assert.equal(createSchema.safeParse({ code: "CW-001", name: "Arun", clientId: "client-1", basicSalary: 0 }).success, false);
+test("createSchema accepts zero basicSalary (bulk-imported rows may not have salary data yet)", () => {
+  assert.equal(createSchema.safeParse({ code: "CW-001", name: "Arun", clientId: "client-1", basicSalary: 0 }).success, true);
+});
+
+test("createSchema rejects negative basicSalary", () => {
   assert.equal(createSchema.safeParse({ code: "CW-001", name: "Arun", clientId: "client-1", basicSalary: -1 }).success, false);
 });
 

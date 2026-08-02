@@ -13,7 +13,7 @@ export function DrawerContent({ className, children, ...props }: DialogPrimitive
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-ink-900/40" />
       <DialogPrimitive.Content
         className={cn(
-          "fixed inset-y-0 right-0 z-50 flex h-full w-full max-w-md flex-col border-l border-border bg-surface p-6",
+          "fixed inset-y-0 right-0 z-50 flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-border bg-surface p-6",
           className
         )}
         {...props}
