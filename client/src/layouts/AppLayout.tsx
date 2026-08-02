@@ -75,7 +75,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
           ))}
         </nav>
 
-        <div className="border-t border-paper-50/10 px-5 py-4 text-xs text-paper-50/50">v1.0.0 — mock data</div>
+        <div className="border-t border-paper-50/10 px-5 py-4 text-xs text-paper-50/50">v1.0.0</div>
       </aside>
     </>
   );
@@ -113,7 +113,9 @@ function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
       </div>
 
       <div className="flex items-center gap-2">
-        <ShortcutsPopover />
+        <div className="hidden sm:block">
+          <ShortcutsPopover />
+        </div>
 
         <div className="flex items-center gap-1.5 px-1">
           <Sun className="size-3.5 text-muted" />

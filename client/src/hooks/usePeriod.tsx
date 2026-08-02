@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
-import { monthOptions } from "@/services/mock/seed";
+import { monthOptions } from "@/lib/date";
 
 export interface Period {
   month: number;

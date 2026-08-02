@@ -1,7 +1,11 @@
 import type { AuditLog, PayrollType } from "@/types";
-import { contractWorkers, inHouseEmployees, payrollRuns, payrollLines, bills, auditLogs, users, monthOptions } from "./mock/seed";
-import { delay } from "./mock/db";
-import { monthLabelShort } from "@/lib/date";
+import { listContractWorkers } from "./contractWorkers";
+import { listInHouseEmployees } from "./inHouseEmployees";
+import { listPayrollRuns, getPayrollLines } from "./payrollRuns";
+import { listBills } from "./bills";
+import { listUsers } from "./users";
+import { listAuditLogs } from "./auditLogs";
+import { monthOptions, monthLabelShort } from "@/lib/date";
 
 export interface DashboardStats {
   totalEmployees: number;
@@ -13,34 +17,49 @@ export interface DashboardStats {
   salarySlipsGenerated: number;
 }
 
-function activeWorkerCount(type: PayrollType): number {
-  return type === "CONTRACT"
-    ? contractWorkers.filter((w) => w.status === "ACTIVE").length
-    : inHouseEmployees.filter((e) => e.status === "ACTIVE").length;
+async function activeCount(type: PayrollType): Promise<number> {
+  if (type === "CONTRACT") return (await listContractWorkers()).filter((w) => w.status === "ACTIVE").length;
+  return (await listInHouseEmployees()).filter((e) => e.status === "ACTIVE").length;
 }
 
 export async function getDashboardStats(type: PayrollType): Promise<DashboardStats> {
-  const runsForType = payrollRuns.filter((r) => r.type === type).sort((a, b) => b.year - a.year || b.month - a.month);
-  const latestRun = runsForType[0];
-  const latestLines = latestRun ? payrollLines.filter((l) => l.payrollRunId === latestRun.id) : [];
+  const [runs, total] = await Promise.all([listPayrollRuns(type), activeCount(type)]);
+
+  // CONTRACT has one run per client per month — "latest" is every run in the most recent month that has any.
+  const latest = runs.reduce<{ month: number; year: number } | null>((acc, r) => {
+    if (!acc || r.year > acc.year || (r.year === acc.year && r.month > acc.month)) return { month: r.month, year: r.year };
+    return acc;
+  }, null);
+  const latestRuns = latest ? runs.filter((r) => r.month === latest.month && r.year === latest.year) : [];
+  const lineSets = await Promise.all(latestRuns.map((r) => getPayrollLines(r.id)));
+  const statusByRunId = new Map(latestRuns.map((r) => [r.id, r.status]));
+  const latestLines = lineSets.flat();
 
   const monthlySalary = latestLines.reduce((sum, l) => sum + Number(l.netPayable), 0);
-  const pendingSalary = latestRun && latestRun.status !== "PAID" ? monthlySalary : 0;
-  const salaryPaid = latestRun && latestRun.status === "PAID" ? monthlySalary : 0;
-  const total = activeWorkerCount(type);
+  const pendingSalary = latestLines.filter((l) => statusByRunId.get(l.payrollRunId) !== "PAID").reduce((sum, l) => sum + Number(l.netPayable), 0);
+  const salaryPaid = latestLines.filter((l) => statusByRunId.get(l.payrollRunId) === "PAID").reduce((sum, l) => sum + Number(l.netPayable), 0);
   // No daily attendance data model exists yet — approximated as workers with
-  // a working-days entry recorded in the latest (in-progress) run.
+  // a working-days entry recorded in the latest (in-progress) run(s).
   const present = latestLines.filter((l) => Number(l.workingDays) > 0).length;
 
-  return delay({
+  let billsGenerated = 0;
+  let salarySlipsGenerated = 0;
+  if (type === "CONTRACT") {
+    const bills = await listBills();
+    billsGenerated = latest ? bills.filter((b) => b.month === latest.month && b.year === latest.year).length : 0;
+  } else {
+    salarySlipsGenerated = latestLines.length;
+  }
+
+  return {
     totalEmployees: total,
     monthlySalary,
     todaysAttendance: { present, total },
     pendingSalary,
     salaryPaid,
-    billsGenerated: bills.length,
-    salarySlipsGenerated: payrollLines.filter((l) => l.inHouseEmployeeId !== null).length,
-  });
+    billsGenerated,
+    salarySlipsGenerated,
+  };
 }
 
 export interface TrendPoint {
@@ -49,13 +68,17 @@ export interface TrendPoint {
 }
 
 export async function getPayrollTrend(type: PayrollType): Promise<TrendPoint[]> {
-  const points = monthOptions().map(({ month, year, }) => {
-    const run = payrollRuns.find((r) => r.month === month && r.year === year && r.type === type);
-    const lines = run ? payrollLines.filter((l) => l.payrollRunId === run.id) : [];
-    const total = lines.reduce((sum, l) => sum + Number(l.netPayable), 0);
-    return { label: monthLabelShort(month, year), total: Math.round(total) };
-  });
-  return delay(points);
+  const options = monthOptions(6);
+  const runs = await listPayrollRuns(type);
+  return Promise.all(
+    options.map(async ({ month, year }) => {
+      const matching = runs.filter((r) => r.month === month && r.year === year);
+      if (matching.length === 0) return { label: monthLabelShort(month, year), total: 0 };
+      const lineSets = await Promise.all(matching.map((r) => getPayrollLines(r.id)));
+      const total = lineSets.flat().reduce((sum, l) => sum + Number(l.netPayable), 0);
+      return { label: monthLabelShort(month, year), total: Math.round(total) };
+    })
+  );
 }
 
 export interface ActivityEntry extends AuditLog {
@@ -63,9 +86,6 @@ export interface ActivityEntry extends AuditLog {
 }
 
 export async function getRecentActivity(limit = 6): Promise<ActivityEntry[]> {
-  const rows = [...auditLogs]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, limit)
-    .map((entry) => ({ ...entry, userName: users.find((u) => u.id === entry.userId)?.name ?? "Unknown" }));
-  return delay(rows);
+  const [logs, users] = await Promise.all([listAuditLogs(limit), listUsers()]);
+  return logs.map((entry) => ({ ...entry, userName: users.find((u) => u.id === entry.userId)?.name ?? "Unknown" }));
 }

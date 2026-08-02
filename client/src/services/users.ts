@@ -1,7 +1,6 @@
 import type { User } from "@/types";
-import { users } from "./mock/seed";
-import { delay } from "./mock/db";
+import { api } from "./api";
 
 export async function listUsers(): Promise<User[]> {
-  return delay([...users]);
+  return api.get<User[]>("/users");
 }

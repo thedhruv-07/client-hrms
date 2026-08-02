@@ -1,10 +1,4 @@
-/**
- * Thin fetch wrapper matching the real server's route shapes exactly
- * (server/src/index.ts + server/src/routes/*.ts). No domain module calls
- * this yet — every services/*.ts file is mock-backed for now (see
- * services/mock/) — but each one is written so pointing it at `api` instead
- * of the mock store is a one-file change, not a rewrite.
- */
+/** Thin fetch wrapper matching the real server's route shapes exactly (server/src/index.ts + server/src/routes/*.ts). */
 
 const BASE_URL = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:4000";
 

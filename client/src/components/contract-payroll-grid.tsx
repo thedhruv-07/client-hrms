@@ -434,7 +434,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <h2 className="font-display text-lg font-semibold">{monthLabel(month, year)}</h2>
           {rows ? (
@@ -443,9 +443,9 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
             </StampBadge>
           ) : null}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Select value={clientId} onValueChange={setClientId}>
-            <SelectTrigger className="w-56">
+            <SelectTrigger className="w-full sm:w-56">
               <SelectValue placeholder="Select a client" />
             </SelectTrigger>
             <SelectContent>
@@ -464,11 +464,11 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
           ) : null}
           <Button variant="outline" onClick={onDownloadNeft} disabled={neftGenerating || isLoading}>
             <Download className="size-4" />
-            {neftGenerating ? "Preparing…" : "Download Bank NEFT Sheet (.xlsx)"}
+            {neftGenerating ? "Preparing…" : <><span className="hidden sm:inline">Download Bank NEFT Sheet (.xlsx)</span><span className="sm:hidden">NEFT Sheet</span></>}
           </Button>
           <Button onClick={onGenerate} disabled={generating || isLoading}>
             <Download className="size-4" />
-            {generating ? "Preparing…" : "Download Wage Register + Bill (.xlsx)"}
+            {generating ? "Preparing…" : <><span className="hidden sm:inline">Download Wage Register + Bill (.xlsx)</span><span className="sm:hidden">Wage Register</span></>}
           </Button>
         </div>
       </div>
@@ -587,11 +587,11 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
       )}
 
       {!isLoading && rows && computed.length > PAGE_SIZE ? (
-        <div className="flex items-center justify-between text-sm text-muted">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted">
           <span>
             Showing {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, computed.length)} of {computed.length} workers
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={safePage === 0}>
               <ChevronLeft className="size-4" />
               Previous

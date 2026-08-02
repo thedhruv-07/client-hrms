@@ -12,6 +12,8 @@ import { clientsRouter } from "./routes/clients";
 import { companyRouter } from "./routes/company";
 import { salarySlipsRouter } from "./routes/salarySlips";
 import { backupRouter } from "./routes/backup";
+import { usersRouter } from "./routes/users";
+import { auditLogsRouter } from "./routes/auditLogs";
 import { docsRouter } from "./docs";
 import { errorHandler } from "./middleware/errorHandler";
 
@@ -38,6 +40,8 @@ app.use("/clients", clientsRouter);
 app.use("/company", companyRouter);
 app.use("/salary-slips", salarySlipsRouter);
 app.use("/backup", backupRouter);
+app.use("/users", usersRouter);
+app.use("/audit-logs", auditLogsRouter);
 app.use("/docs", docsRouter);
 
 app.use(errorHandler);

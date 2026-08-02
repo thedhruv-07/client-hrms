@@ -1,6 +1,5 @@
 /**
- * Mirrors server/prisma/schema.prisma exactly, so swapping the mock API for
- * the real one is a data-layer change, not a type rewrite.
+ * Mirrors server/prisma/schema.prisma exactly.
  *
  * Decimal fields (money, hours, days) are typed `string` — that's how
  * Prisma's Decimal serializes over JSON. Parse with Number() at the point

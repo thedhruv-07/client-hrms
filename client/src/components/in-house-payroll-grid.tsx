@@ -106,16 +106,17 @@ export function InHousePayrollGrid({ month, year }: { month: number; year: numbe
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <h2 className="font-display text-lg font-semibold">{monthLabel(month, year)}</h2>
           <StampBadge tone={runQuery.data?.status === "FINALIZED" ? "positive" : "ink"}>
             {runQuery.data?.status ?? "DRAFT"}
           </StampBadge>
         </div>
-        <Button onClick={onGenerate} disabled={generating}>
+        <Button onClick={onGenerate} disabled={generating} className="w-full sm:w-auto">
           <Download className="size-4" />
-          {generating ? "Preparing…" : "Download Payroll Summary (.xlsx)"}
+          <span className="hidden sm:inline">{generating ? "Preparing…" : "Download Payroll Summary (.xlsx)"}</span>
+          <span className="sm:hidden">{generating ? "Preparing…" : "Payroll Summary"}</span>
         </Button>
       </div>
 

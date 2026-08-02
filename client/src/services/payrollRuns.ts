@@ -1,8 +1,5 @@
 import type { PayrollLine, PayrollRun, PayrollType } from "@/types";
-import { monthOptions } from "./mock/seed";
 import { api } from "./api";
-
-export { monthOptions };
 
 export async function listPayrollRuns(type?: PayrollType): Promise<PayrollRun[]> {
   return api.get<PayrollRun[]>(`/payroll-runs${type ? `?type=${type}` : ""}`);
