@@ -4,6 +4,7 @@ import { api, ApiRequestError } from "./api";
 export interface ContractWorkerInput {
   code: string;
   name: string;
+  clientId: string;
   basicSalary: number;
   bankAccount?: string;
   ifsc?: string;
@@ -12,8 +13,12 @@ export interface ContractWorkerInput {
   uan?: string;
 }
 
-export async function listContractWorkers(q?: string): Promise<ContractWorker[]> {
-  return api.get<ContractWorker[]>(`/contract-workers${q ? `?q=${encodeURIComponent(q)}` : ""}`);
+export async function listContractWorkers(q?: string, clientId?: string): Promise<ContractWorker[]> {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (clientId) params.set("clientId", clientId);
+  const qs = params.toString();
+  return api.get<ContractWorker[]>(`/contract-workers${qs ? `?${qs}` : ""}`);
 }
 
 export async function getContractWorker(id: string): Promise<ContractWorker | null> {

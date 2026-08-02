@@ -1,29 +1,32 @@
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { contractWorkerSchema, type ContractWorkerFormValues } from "@/lib/validation/contractWorker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { ContractWorker } from "@/types";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import type { Client, ContractWorker } from "@/types";
 
 interface ContractWorkerFormProps {
   defaultValues?: Partial<ContractWorkerFormValues>;
   existingCodes: string[];
   currentCode?: string;
+  clients: Client[];
   onSubmit: (values: ContractWorkerFormValues) => Promise<void>;
   onCancel: () => void;
   submitLabel?: string;
 }
 
-export function ContractWorkerForm({ defaultValues, existingCodes, currentCode, onSubmit, onCancel, submitLabel = "Save" }: ContractWorkerFormProps) {
+export function ContractWorkerForm({ defaultValues, existingCodes, currentCode, clients, onSubmit, onCancel, submitLabel = "Save" }: ContractWorkerFormProps) {
   const {
     register,
     handleSubmit,
+    control,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<ContractWorkerFormValues>({
     resolver: zodResolver(contractWorkerSchema),
-    defaultValues: { code: "", name: "", basicSalary: 0, ...defaultValues },
+    defaultValues: { code: "", name: "", clientId: "", basicSalary: 0, ...defaultValues },
   });
 
   async function handleFormSubmit(values: ContractWorkerFormValues) {
@@ -53,6 +56,29 @@ export function ContractWorkerForm({ defaultValues, existingCodes, currentCode, 
         <Label htmlFor="name">Name</Label>
         <Input id="name" {...register("name")} />
         {errors.name ? <p className="text-xs text-danger">{errors.name.message}</p> : null}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="clientId">Client</Label>
+        <Controller
+          name="clientId"
+          control={control}
+          render={({ field }) => (
+            <Select value={field.value} onValueChange={field.onChange}>
+              <SelectTrigger id="clientId">
+                <SelectValue placeholder="Select a client" />
+              </SelectTrigger>
+              <SelectContent>
+                {clients.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        />
+        {errors.clientId ? <p className="text-xs text-danger">{errors.clientId.message}</p> : null}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -94,6 +120,7 @@ export function contractWorkerToDefaults(worker: ContractWorker): ContractWorker
   return {
     code: worker.code,
     name: worker.name,
+    clientId: worker.clientId,
     basicSalary: Number(worker.basicSalary),
     bankAccount: worker.bankAccount ?? "",
     ifsc: worker.ifsc ?? "",

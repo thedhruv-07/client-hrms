@@ -26,6 +26,10 @@ payrollRunsRouter.use(requireAuth);
  *       - in: query
  *         name: year
  *         schema: { type: integer }
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string }
+ *         description: CONTRACT runs only — each has one client
  *     responses:
  *       200: { description: Payroll runs }
  *       401: { description: Missing or invalid token }
@@ -34,11 +38,13 @@ payrollRunsRouter.get("/", async (req, res) => {
   const type = queryString(req.query["type"]);
   const month = queryNumber(req.query["month"]);
   const year = queryNumber(req.query["year"]);
+  const clientId = queryString(req.query["clientId"]);
   const runs = await prisma.payrollRun.findMany({
     where: {
       ...(type ? { type: type as "CONTRACT" | "INHOUSE" } : {}),
       ...(month !== undefined ? { month } : {}),
       ...(year !== undefined ? { year } : {}),
+      ...(clientId ? { clientId } : {}),
     },
     orderBy: [{ year: "asc" }, { month: "asc" }],
   });
@@ -78,6 +84,7 @@ const saveLineSchema = z.object({
 export const saveContractRunSchema = z.object({
   month: z.number().int().min(1).max(12),
   year: z.number().int(),
+  clientId: z.string().min(1),
   lines: z.array(saveLineSchema),
 });
 
@@ -94,10 +101,11 @@ export const saveContractRunSchema = z.object({
  *         application/json:
  *           schema:
  *             type: object
- *             required: [month, year, lines]
+ *             required: [month, year, clientId, lines]
  *             properties:
  *               month: { type: integer, minimum: 1, maximum: 12 }
  *               year: { type: integer }
+ *               clientId: { type: string }
  *               lines:
  *                 type: array
  *                 items:
@@ -110,7 +118,7 @@ export const saveContractRunSchema = z.object({
  *                     advance: { type: number }
  *     responses:
  *       200: { description: The saved payroll run }
- *       400: { description: Validation error, or an unknown worker id }
+ *       400: { description: Validation error, an unknown worker id, or a worker that belongs to a different client }
  *       401: { description: Missing or invalid token }
  *       403: { description: Requires ADMIN or HR }
  *       409: { description: The run is finalized and can no longer be edited }
@@ -121,9 +129,9 @@ payrollRunsRouter.put("/contract", requireRole("ADMIN", "HR"), async (req, res) 
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const { month, year, lines } = parsed.data;
+  const { month, year, clientId, lines } = parsed.data;
 
-  const existingRun = await prisma.payrollRun.findUnique({ where: { month_year_type: { month, year, type: "CONTRACT" } } });
+  const existingRun = await prisma.payrollRun.findUnique({ where: { month_year_type_clientId: { month, year, type: "CONTRACT", clientId } } });
   if (existingRun?.status === "FINALIZED") {
     res.status(409).json({ error: "This period is finalized and can no longer be edited." });
     return;
@@ -132,21 +140,27 @@ payrollRunsRouter.put("/contract", requireRole("ADMIN", "HR"), async (req, res) 
   const workers = await prisma.contractWorker.findMany({ where: { id: { in: lines.map((l) => l.contractWorkerId) } } });
   const workerMap = new Map(workers.map((w) => [w.id, w]));
   for (const l of lines) {
-    if (!workerMap.has(l.contractWorkerId)) {
+    const worker = workerMap.get(l.contractWorkerId);
+    if (!worker) {
       res.status(400).json({ error: `Unknown worker: ${l.contractWorkerId}` });
+      return;
+    }
+    if (worker.clientId !== clientId) {
+      res.status(400).json({ error: `Worker ${worker.code} does not belong to this client` });
       return;
     }
   }
 
   const run = await prisma.payrollRun.upsert({
-    where: { month_year_type: { month, year, type: "CONTRACT" } },
+    where: { month_year_type_clientId: { month, year, type: "CONTRACT", clientId } },
     update: {},
-    create: { month, year, type: "CONTRACT", status: "DRAFT", createdById: req.user!.id },
+    create: { month, year, type: "CONTRACT", clientId, status: "DRAFT", createdById: req.user!.id },
   });
 
+  const monthDays = new Date(year, month, 0).getDate();
   const lineData = lines.map((l) => {
     const worker = workerMap.get(l.contractWorkerId)!;
-    const result = calculateWageLine({ basicSalary: Number(worker.basicSalary), workingDays: l.workingDays, otHours: l.otHours, advance: l.advance });
+    const result = calculateWageLine({ basicSalary: Number(worker.basicSalary), monthDays, workingDays: l.workingDays, otHours: l.otHours, advance: l.advance });
     return {
       payrollRunId: run.id,
       contractWorkerId: l.contractWorkerId,

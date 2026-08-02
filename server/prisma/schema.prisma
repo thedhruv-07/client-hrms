@@ -71,13 +71,18 @@ model Client {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  bills Bill[]
+  bills           Bill[]
+  contractWorkers ContractWorker[]
+  payrollRuns     PayrollRun[]
 }
 
 model ContractWorker {
   id           String       @id @default(cuid())
   code         String       @unique
   name         String
+  /// Which client this worker is deployed at — one client per worker.
+  clientId     String
+  client       Client       @relation(fields: [clientId], references: [id])
   basicSalary  Decimal      @db.Decimal(12, 2)
   bankAccount  String?
   ifsc         String?
@@ -121,6 +126,9 @@ model PayrollRun {
   month       Int
   year        Int
   type        PayrollType
+  /// Only set for CONTRACT runs — one wage register per client per month. Always null for INHOUSE.
+  clientId    String?
+  client      Client?       @relation(fields: [clientId], references: [id])
   status      PayrollStatus @default(DRAFT)
   createdById String
   createdBy   User          @relation(fields: [createdById], references: [id])
@@ -130,7 +138,7 @@ model PayrollRun {
   lines PayrollLine[]
   bills Bill[]
 
-  @@unique([month, year, type])
+  @@unique([month, year, type, clientId])
 }
 
 /// Mirrors the wage-sheet row exactly. One row type serves both modules —

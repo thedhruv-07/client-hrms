@@ -6,9 +6,9 @@ import { sumWageLines } from "./wage";
 // Baseline fixture from PROJECT_SPEC.md sections 2 and 7 — same month's
 // wage register feeds this bill; known Grand Total is 43,077.43.
 const WAGE_INPUTS = [
-  { basicSalary: 17000, workingDays: 23, otHours: 58, advance: 1000 },
-  { basicSalary: 17000, workingDays: 18, otHours: 51, advance: 5000 },
-  { basicSalary: 17000, workingDays: 3, otHours: 1 },
+  { basicSalary: 17000, monthDays: 30, workingDays: 23, otHours: 58, advance: 1000 },
+  { basicSalary: 17000, monthDays: 30, workingDays: 18, otHours: 51, advance: 5000 },
+  { basicSalary: 17000, monthDays: 30, workingDays: 3, otHours: 1 },
 ];
 
 test("bill reproduces the known Grand Total end-to-end from wage-register totals", () => {

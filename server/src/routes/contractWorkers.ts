@@ -14,6 +14,7 @@ contractWorkersRouter.use(requireAuth);
 export const createSchema = z.object({
   code: z.string().min(1),
   name: z.string().min(1),
+  clientId: z.string().min(1),
   basicSalary: z.number().positive(),
   bankAccount: z.string().optional(),
   ifsc: z.string().optional(),
@@ -28,7 +29,7 @@ export const updateSchema = createSchema.partial().extend({
 
 const importSchema = z.object({ csv: z.string().min(1) });
 
-const CSV_COLUMNS = ["code", "name", "basicSalary", "bankAccount", "ifsc", "pfNo", "esicNo", "uan", "status"];
+const CSV_COLUMNS = ["code", "name", "clientId", "basicSalary", "bankAccount", "ifsc", "pfNo", "esicNo", "uan", "status"];
 
 function isNotFoundError(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025";
@@ -51,6 +52,9 @@ function idParam(req: Request): string | undefined {
  *         name: q
  *         schema: { type: string }
  *         description: Case-insensitive substring match on name or code
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string }
  *     responses:
  *       200:
  *         description: Array of contract workers
@@ -61,10 +65,12 @@ function idParam(req: Request): string | undefined {
  */
 contractWorkersRouter.get("/", async (req, res) => {
   const q = queryString(req.query["q"]);
+  const clientId = queryString(req.query["clientId"]);
   const workers = await prisma.contractWorker.findMany({
-    where: q
-      ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { code: { contains: q, mode: "insensitive" } }] }
-      : {},
+    where: {
+      ...(q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { code: { contains: q, mode: "insensitive" } }] } : {}),
+      ...(clientId ? { clientId } : {}),
+    },
     orderBy: { code: "asc" },
   });
   res.json(workers);
@@ -90,6 +96,7 @@ contractWorkersRouter.get("/export", async (_req, res) => {
     workers.map((w) => ({
       code: w.code,
       name: w.name,
+      clientId: w.clientId,
       basicSalary: w.basicSalary.toString(),
       bankAccount: w.bankAccount,
       ifsc: w.ifsc,
@@ -146,6 +153,7 @@ contractWorkersRouter.post("/import", requireRole("ADMIN", "HR"), async (req, re
     const parsed = createSchema.safeParse({
       code: row["code"],
       name: row["name"],
+      clientId: row["clientId"],
       basicSalary: Number(row["basicSalary"]),
       bankAccount: row["bankAccount"] || undefined,
       ifsc: row["ifsc"] || undefined,
@@ -240,6 +248,10 @@ contractWorkersRouter.post("/", requireRole("ADMIN", "HR"), async (req, res) => 
       res.status(409).json({ error: "Code already in use" });
       return;
     }
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2003") {
+      res.status(400).json({ error: "Unknown client" });
+      return;
+    }
     throw err;
   }
 });
@@ -295,6 +307,10 @@ contractWorkersRouter.put("/:id", requireRole("ADMIN", "HR"), async (req, res) =
   } catch (err) {
     if (isNotFoundError(err)) {
       res.status(404).json({ error: "Not found" });
+      return;
+    }
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2003") {
+      res.status(400).json({ error: "Unknown client" });
       return;
     }
     throw err;

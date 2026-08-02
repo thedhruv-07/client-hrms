@@ -55,6 +55,7 @@ export interface ContractWorker {
   id: string;
   code: string;
   name: string;
+  clientId: string;
   basicSalary: string;
   bankAccount: string | null;
   ifsc: string | null;
@@ -94,6 +95,8 @@ export interface PayrollRun {
   month: number;
   year: number;
   type: PayrollType;
+  /** Only set for CONTRACT runs — one wage register per client per month. Always null for INHOUSE. */
+  clientId: string | null;
   status: PayrollStatus;
   createdById: string;
   createdAt: string;

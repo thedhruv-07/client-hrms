@@ -3,16 +3,25 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import { calculateInHouseWageLine } from "../src/engine/inhousePayroll";
+import { calculateWageLine } from "../src/engine/wage";
 
 const adapter = new PrismaPg({ connectionString: process.env["DATABASE_URL"] });
 const prisma = new PrismaClient({ adapter });
 
-// Fixture values taken verbatim from PROJECT_SPEC.md section 7 (the real
-// source workbook) — used as regression baseline once the calc engine lands.
+// Input values taken verbatim from PROJECT_SPEC.md section 7 (the real source
+// workbook, a 30-day June). Wage figures are computed via the real engine
+// below (not hard-coded), so a 31-day month like July correctly pays a lower
+// per-day rate instead of silently reusing June's 30-day numbers.
 const WORKERS = [
-  { code: "CW-001", name: "Arun", basicSalary: 17000, workingDays: 23, otHours: 58, grossEarning: 17141.67, totalDeduction: 162.85, advance: 1000, netPayable: 15978.82 },
-  { code: "CW-002", name: "Biru Kumar", basicSalary: 17000, workingDays: 18, otHours: 51, grossEarning: 13812.50, totalDeduction: 131.22, advance: 5000, netPayable: 8681.28 },
-  { code: "CW-003", name: "Suraj", basicSalary: 17000, workingDays: 3, otHours: 1, grossEarning: 1770.83, totalDeduction: 16.82, advance: 0, netPayable: 1754.01 },
+  { code: "CW-001", name: "Arun", basicSalary: 17000, workingDays: 23, otHours: 58, advance: 1000 },
+  { code: "CW-002", name: "Biru Kumar", basicSalary: 17000, workingDays: 18, otHours: 51, advance: 5000 },
+  { code: "CW-003", name: "Suraj", basicSalary: 17000, workingDays: 3, otHours: 1, advance: 0 },
+];
+
+// A second client demonstrates the multi-client structure — its own workers and its own wage register.
+const CLIENT2_WORKERS = [
+  { code: "CW-101", name: "Deepak", basicSalary: 16000, workingDays: 25, otHours: 20, advance: 0 },
+  { code: "CW-102", name: "Manoj", basicSalary: 16000, workingDays: 22, otHours: 10, advance: 2000 },
 ];
 
 const EMPLOYEES = [
@@ -97,6 +106,16 @@ async function main() {
     },
   });
 
+  const client2 = await prisma.client.upsert({
+    where: { id: "seed-client-2" },
+    update: {},
+    create: {
+      id: "seed-client-2",
+      name: "OMP India Pvt. Limited",
+      address: "Client address, to be filled in",
+    },
+  });
+
   const passwordHash = await bcrypt.hash("changeme123", 10);
   const admin = await prisma.user.upsert({
     where: { email: "admin@example.com" },
@@ -109,25 +128,25 @@ async function main() {
     },
   });
 
-  async function seedContractRun(month: number, year: number, status: "DRAFT" | "FINALIZED") {
+  async function seedContractRun(month: number, year: number, status: "DRAFT" | "FINALIZED", clientId: string, workers: typeof WORKERS) {
     const run = await prisma.payrollRun.upsert({
-      where: { month_year_type: { month, year, type: "CONTRACT" } },
+      where: { month_year_type_clientId: { month, year, type: "CONTRACT", clientId } },
       update: {},
-      create: { month, year, type: "CONTRACT", status, createdById: admin.id },
+      create: { month, year, type: "CONTRACT", status, clientId, createdById: admin.id },
     });
 
     const hasLines = (await prisma.payrollLine.count({ where: { payrollRunId: run.id } })) > 0;
     if (hasLines) return run;
 
-    for (const w of WORKERS) {
+    const monthDays = new Date(year, month, 0).getDate();
+    for (const w of workers) {
       const worker = await prisma.contractWorker.upsert({
         where: { code: w.code },
         update: {},
-        create: { code: w.code, name: w.name, basicSalary: w.basicSalary },
+        create: { code: w.code, name: w.name, basicSalary: w.basicSalary, clientId },
       });
 
-      const basicEarn = Math.round(((w.basicSalary / 30) * w.workingDays) * 100) / 100;
-      const otAmount = Math.round(((w.basicSalary / 30 / 8) * w.otHours) * 100) / 100;
+      const result = calculateWageLine({ basicSalary: w.basicSalary, monthDays, workingDays: w.workingDays, otHours: w.otHours, advance: w.advance });
 
       await prisma.payrollLine.create({
         data: {
@@ -135,15 +154,15 @@ async function main() {
           contractWorkerId: worker.id,
           workingDays: w.workingDays,
           otHours: w.otHours,
-          basicEarn,
-          otAmount,
-          grossEarning: w.grossEarning,
-          pf: 0,
-          esic: Math.round((w.grossEarning * 0.75) / 100 * 100) / 100,
-          lwf: Math.round((w.grossEarning * 0.2) / 100 * 100) / 100,
-          advance: w.advance,
-          totalDeduction: w.totalDeduction,
-          netPayable: w.netPayable,
+          basicEarn: result.basicEarn,
+          otAmount: result.otAmount,
+          grossEarning: result.grossEarning,
+          pf: result.pf,
+          esic: result.esic,
+          lwf: result.lwf,
+          advance: result.advance,
+          totalDeduction: result.totalDeduction,
+          netPayable: result.netPayable,
         },
       });
     }
@@ -151,15 +170,19 @@ async function main() {
   }
 
   // June: finalized, already billable. July: this month's open run, no bill yet.
-  await seedContractRun(6, 2026, "FINALIZED");
-  await seedContractRun(7, 2026, "DRAFT");
+  await seedContractRun(6, 2026, "FINALIZED", client.id, WORKERS);
+  await seedContractRun(7, 2026, "DRAFT", client.id, WORKERS);
+
+  // Second client's own, independent wage register for the same period.
+  await seedContractRun(7, 2026, "DRAFT", client2.id, CLIENT2_WORKERS);
 
   async function seedInHouseRun(month: number, year: number, status: "DRAFT" | "FINALIZED") {
-    const run = await prisma.payrollRun.upsert({
-      where: { month_year_type: { month, year, type: "INHOUSE" } },
-      update: {},
-      create: { month, year, type: "INHOUSE", status, createdById: admin.id },
-    });
+    // clientId is always null for INHOUSE runs, and Postgres treats each NULL in a unique
+    // index as distinct, so the compound key can't be used to find-or-create here — look up
+    // by the non-client fields instead.
+    const run =
+      (await prisma.payrollRun.findFirst({ where: { month, year, type: "INHOUSE" } })) ??
+      (await prisma.payrollRun.create({ data: { month, year, type: "INHOUSE", status, createdById: admin.id } }));
 
     const hasLines = (await prisma.payrollLine.count({ where: { payrollRunId: run.id } })) > 0;
     if (hasLines) return run;
@@ -217,7 +240,9 @@ async function main() {
 
   await seedInHouseRun(7, 2026, "DRAFT");
 
-  console.log(`Seeded company=${company.name} client=${client.name} admin=${admin.email} workers=${WORKERS.length} employees=${EMPLOYEES.length}`);
+  console.log(
+    `Seeded company=${company.name} clients=[${client.name}, ${client2.name}] admin=${admin.email} workers=${WORKERS.length + CLIENT2_WORKERS.length} employees=${EMPLOYEES.length}`
+  );
 }
 
 main()

@@ -4,6 +4,7 @@ import { z } from "zod";
 export const contractWorkerSchema = z.object({
   code: z.string().min(1, "Code is required"),
   name: z.string().min(1, "Name is required"),
+  clientId: z.string().min(1, "Client is required"),
   basicSalary: z.coerce.number().positive("Basic salary must be greater than 0"),
   bankAccount: z.string().optional(),
   ifsc: z.string().optional(),

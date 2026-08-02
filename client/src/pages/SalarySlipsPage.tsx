@@ -7,6 +7,7 @@ import { getCompany } from "@/services/company";
 import { usePeriod } from "@/hooks/usePeriod";
 import { calculateInHouseWageLine } from "@/lib/calc";
 import { downloadSalarySlip, downloadSalarySlipsBatch, type SalarySlipExportData } from "@/lib/exportExcel";
+import { downloadSalarySlipPdf, downloadSalarySlipsPdfBatch } from "@/services/salarySlips";
 import { daysInMonth, monthLabel } from "@/lib/date";
 import { formatCurrencyPrecise } from "@/lib/format";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -125,6 +126,8 @@ export function SalarySlipsPage() {
   const [preview, setPreview] = useState<SalarySlipData | null>(null);
   const [batchGenerating, setBatchGenerating] = useState(false);
   const [downloadingCode, setDownloadingCode] = useState<string | null>(null);
+  const [pdfBatchGenerating, setPdfBatchGenerating] = useState(false);
+  const [pdfDownloadingCode, setPdfDownloadingCode] = useState<string | null>(null);
 
   const companyQuery = useQuery({ queryKey: ["company"], queryFn: getCompany });
   const employeesQuery = useQuery({ queryKey: ["in-house-employees", ""], queryFn: () => listInHouseEmployees() });
@@ -174,6 +177,29 @@ export function SalarySlipsPage() {
     }
   }
 
+  async function onDownloadAllPdf() {
+    setPdfBatchGenerating(true);
+    try {
+      await downloadSalarySlipsPdfBatch(slips.map(toExportData), label);
+      toast({ title: `${slips.length} salary slips downloaded`, description: `salary-slips-${label.toLowerCase()}.pdf` });
+    } catch (err) {
+      toast({ title: "Could not generate the PDF", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setPdfBatchGenerating(false);
+    }
+  }
+
+  async function onDownloadOnePdf(slip: SalarySlipData) {
+    setPdfDownloadingCode(slip.employeeCode);
+    try {
+      await downloadSalarySlipPdf(toExportData(slip));
+    } catch (err) {
+      toast({ title: "Could not generate the PDF", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setPdfDownloadingCode(null);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -181,10 +207,16 @@ export function SalarySlipsPage() {
           <h1 className="font-display text-2xl font-semibold">Salary Slips</h1>
           <p className="text-sm text-muted">{label}</p>
         </div>
-        <Button onClick={onDownloadAll} disabled={isLoading || batchGenerating || slips.length === 0}>
-          <Download className="size-4" />
-          {batchGenerating ? "Preparing…" : "Download All (.xlsx)"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={onDownloadAllPdf} disabled={isLoading || pdfBatchGenerating || slips.length === 0}>
+            <Download className="size-4" />
+            {pdfBatchGenerating ? "Preparing…" : "Download All (.pdf)"}
+          </Button>
+          <Button onClick={onDownloadAll} disabled={isLoading || batchGenerating || slips.length === 0}>
+            <Download className="size-4" />
+            {batchGenerating ? "Preparing…" : "Download All (.xlsx)"}
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-md border border-border bg-surface">
@@ -220,9 +252,13 @@ export function SalarySlipsPage() {
                         <FileText className="size-4" />
                         Preview
                       </Button>
+                      <Button variant="ghost" size="sm" disabled={pdfDownloadingCode === slip.employeeCode} onClick={() => onDownloadOnePdf(slip)}>
+                        <Download className="size-4" />
+                        {pdfDownloadingCode === slip.employeeCode ? "…" : "PDF"}
+                      </Button>
                       <Button variant="ghost" size="sm" disabled={downloadingCode === slip.employeeCode} onClick={() => onDownloadOne(slip)}>
                         <Download className="size-4" />
-                        {downloadingCode === slip.employeeCode ? "…" : "Download"}
+                        {downloadingCode === slip.employeeCode ? "…" : "Excel"}
                       </Button>
                     </TableCell>
                   </TableRow>

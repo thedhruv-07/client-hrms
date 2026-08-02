@@ -7,33 +7,33 @@ import { calculateWageLine, sumWageLines } from "./wage";
 // I = (D/30) * (E + F/8), so D = Gross*30 / (E + F/8).
 
 test("Arun (23 days, 58 OT hrs)", () => {
-  const r = calculateWageLine({ basicSalary: 17000, workingDays: 23, otHours: 58, advance: 1000 });
+  const r = calculateWageLine({ basicSalary: 17000, monthDays: 30, workingDays: 23, otHours: 58, advance: 1000 });
   assert.equal(r.grossEarning, 17141.67);
   assert.equal(r.totalDeduction, 162.85);
   assert.equal(r.netPayable, 15978.82);
 });
 
 test("Biru Kumar (18 days, 51 OT hrs, adv. 5000)", () => {
-  const r = calculateWageLine({ basicSalary: 17000, workingDays: 18, otHours: 51, advance: 5000 });
+  const r = calculateWageLine({ basicSalary: 17000, monthDays: 30, workingDays: 18, otHours: 51, advance: 5000 });
   assert.equal(r.grossEarning, 13812.50);
   assert.equal(r.totalDeduction, 131.22);
   assert.equal(r.netPayable, 8681.28);
 });
 
 test("Suraj (3 days, 1 OT hr)", () => {
-  const r = calculateWageLine({ basicSalary: 17000, workingDays: 3, otHours: 1 });
+  const r = calculateWageLine({ basicSalary: 17000, monthDays: 30, workingDays: 3, otHours: 1 });
   assert.equal(r.grossEarning, 1770.83);
   assert.equal(r.totalDeduction, 16.82);
   assert.equal(r.netPayable, 1754.01);
 });
 
 test("PF defaults to 0 when not supplied", () => {
-  const r = calculateWageLine({ basicSalary: 17000, workingDays: 23, otHours: 58 });
+  const r = calculateWageLine({ basicSalary: 17000, monthDays: 30, workingDays: 23, otHours: 58 });
   assert.equal(r.pf, 0);
 });
 
 test("zero working days and zero OT hours nets to zero minus any advance", () => {
-  const r = calculateWageLine({ basicSalary: 17000, workingDays: 0, otHours: 0, advance: 500 });
+  const r = calculateWageLine({ basicSalary: 17000, monthDays: 30, workingDays: 0, otHours: 0, advance: 500 });
   assert.equal(r.basicEarn, 0);
   assert.equal(r.otAmount, 0);
   assert.equal(r.grossEarning, 0);
@@ -42,11 +42,17 @@ test("zero working days and zero OT hours nets to zero minus any advance", () =>
   assert.equal(r.netPayable, -500);
 });
 
+test("a 31-day month pays a lower per-day rate than a 30-day month for the same working days", () => {
+  const thirtyDayMonth = calculateWageLine({ basicSalary: 17000, monthDays: 30, workingDays: 23, otHours: 0 });
+  const thirtyOneDayMonth = calculateWageLine({ basicSalary: 17000, monthDays: 31, workingDays: 23, otHours: 0 });
+  assert.ok(thirtyOneDayMonth.basicEarn < thirtyDayMonth.basicEarn);
+});
+
 test("register totals match the sheet's row-6 column totals", () => {
   const inputs = [
-    { basicSalary: 17000, workingDays: 23, otHours: 58, advance: 1000 },
-    { basicSalary: 17000, workingDays: 18, otHours: 51, advance: 5000 },
-    { basicSalary: 17000, workingDays: 3, otHours: 1 },
+    { basicSalary: 17000, monthDays: 30, workingDays: 23, otHours: 58, advance: 1000 },
+    { basicSalary: 17000, monthDays: 30, workingDays: 18, otHours: 51, advance: 5000 },
+    { basicSalary: 17000, monthDays: 30, workingDays: 3, otHours: 1 },
   ];
   const totals = sumWageLines(inputs);
   assert.equal(totals.grossEarning, 32725.00);

@@ -11,6 +11,7 @@ import { Toaster } from "@/components/toaster";
 import { Login } from "@/pages/Login";
 import { Dashboard } from "@/pages/Dashboard";
 import { WorkersPage } from "@/pages/WorkersPage";
+import { ClientsPage } from "@/pages/ClientsPage";
 import { EmployeesPage } from "@/pages/EmployeesPage";
 import { PayrollRunPage } from "@/pages/PayrollRunPage";
 import { BillsPage } from "@/pages/BillsPage";
@@ -41,6 +42,7 @@ export default function App() {
                     <Route element={<AppLayout />}>
                       <Route path="/" element={<Dashboard />} />
                       <Route path="/workers" element={<WorkersPage />} />
+                      <Route path="/clients" element={<ClientsPage />} />
                       <Route path="/employees" element={<EmployeesPage />} />
                       <Route path="/payroll-runs" element={<PayrollRunPage />} />
                       <Route path="/bills" element={<BillsPage />} />

@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { flexRender, getCoreRowModel, getSortedRowModel, useReactTable, type ColumnDef, type SortingState } from "@tanstack/react-table";
 import { Plus, Search, ArrowUpDown } from "lucide-react";
 import { listContractWorkers, createContractWorker, updateContractWorker, deactivateContractWorker } from "@/services/contractWorkers";
+import { listClients } from "@/services/clients";
 import type { ContractWorker } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,11 +37,14 @@ export function WorkersPage() {
     queryFn: () => listContractWorkers(search || undefined),
   });
 
+  const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: listClients });
+
   function invalidate() {
     return queryClient.invalidateQueries({ queryKey: ["contract-workers"] });
   }
 
   const existingCodes = useMemo(() => (workers ?? []).map((w) => w.code), [workers]);
+  const clientName = useCallback((id: string) => clients?.find((c) => c.id === id)?.name ?? "—", [clients]);
 
   const columns = useMemo<ColumnDef<ContractWorker>[]>(
     () => [
@@ -62,6 +66,11 @@ export function WorkersPage() {
         ),
       },
       {
+        accessorKey: "clientId",
+        header: "Client",
+        cell: (info) => clientName(info.getValue<string>()),
+      },
+      {
         accessorKey: "basicSalary",
         header: () => <div className="text-right">Basic Salary</div>,
         cell: (info) => <div className="figure text-right">{formatCurrencyPrecise(Number(info.getValue<string>()))}</div>,
@@ -74,7 +83,7 @@ export function WorkersPage() {
         ),
       },
     ],
-    []
+    [clientName]
   );
 
   const table = useReactTable({
@@ -159,6 +168,7 @@ export function WorkersPage() {
           </DialogHeader>
           <ContractWorkerForm
             existingCodes={existingCodes}
+            clients={clients ?? []}
             onCancel={() => setAddOpen(false)}
             onSubmit={async (values) => {
               try {
@@ -187,6 +197,7 @@ export function WorkersPage() {
                   defaultValues={contractWorkerToDefaults(selected)}
                   currentCode={selected.code}
                   existingCodes={existingCodes}
+                  clients={clients ?? []}
                   submitLabel="Save changes"
                   onCancel={() => setEditMode(false)}
                   onSubmit={async (values) => {
@@ -209,6 +220,10 @@ export function WorkersPage() {
                   <p className="figure text-sm text-muted">{selected.code}</p>
                 </DrawerHeader>
                 <dl className="flex flex-1 flex-col gap-3 text-sm">
+                  <div className="flex justify-between">
+                    <dt className="text-muted">Client</dt>
+                    <dd>{clientName(selected.clientId)}</dd>
+                  </div>
                   <div className="flex justify-between">
                     <dt className="text-muted">Basic Salary</dt>
                     <dd className="figure">{formatCurrencyPrecise(Number(selected.basicSalary))}</dd>

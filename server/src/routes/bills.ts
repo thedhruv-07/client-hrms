@@ -1,9 +1,9 @@
-
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { logAudit } from "../lib/audit";
+import { queryString } from "../lib/query";
 import { calculateBill } from "../engine/bill";
 
 export const billsRouter = Router();
@@ -15,13 +15,19 @@ billsRouter.use(requireAuth);
  * /bills:
  *   get:
  *     tags: [Bills]
- *     summary: List client GST bills
+ *     summary: List client GST bills, optionally filtered to one client
+ *     parameters:
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string }
  *     responses:
  *       200: { description: Bills with client and line detail }
  *       401: { description: Missing or invalid token }
  */
-billsRouter.get("/", async (_req, res) => {
+billsRouter.get("/", async (req, res) => {
+  const clientId = queryString(req.query["clientId"]);
   const bills = await prisma.bill.findMany({
+    where: clientId ? { clientId } : {},
     include: { client: true, line: true },
     orderBy: [{ year: "desc" }, { month: "desc" }],
   });
@@ -59,6 +65,7 @@ billsRouter.get("/:id", async (req, res) => {
 export const generateSchema = z.object({
   month: z.number().int().min(1).max(12),
   year: z.number().int(),
+  clientId: z.string().min(1),
 });
 
 /**
@@ -74,17 +81,18 @@ export const generateSchema = z.object({
  *         application/json:
  *           schema:
  *             type: object
- *             required: [month, year]
+ *             required: [month, year, clientId]
  *             properties:
  *               month: { type: integer, minimum: 1, maximum: 12 }
  *               year: { type: integer }
+ *               clientId: { type: string }
  *     responses:
  *       200: { description: Existing bill recalculated and updated }
  *       201: { description: Created bill with client and line detail }
  *       400: { description: Validation error, or the period's wage register is empty }
  *       401: { description: Missing or invalid token }
  *       403: { description: Requires ADMIN, HR, or ACCOUNTANT }
- *       404: { description: No contract payroll run for this period }
+ *       404: { description: No contract payroll run for this client/period }
  */
 billsRouter.post("/generate", requireRole("ADMIN", "HR", "ACCOUNTANT"), async (req, res) => {
   const parsed = generateSchema.safeParse(req.body);
@@ -92,14 +100,14 @@ billsRouter.post("/generate", requireRole("ADMIN", "HR", "ACCOUNTANT"), async (r
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const { month, year } = parsed.data;
+  const { month, year, clientId } = parsed.data;
 
   const run = await prisma.payrollRun.findUnique({
-    where: { month_year_type: { month, year, type: "CONTRACT" } },
+    where: { month_year_type_clientId: { month, year, type: "CONTRACT", clientId } },
     include: { lines: true },
   });
   if (!run) {
-    res.status(404).json({ error: "No contract payroll run for this period yet." });
+    res.status(404).json({ error: "No contract payroll run for this client/period yet." });
     return;
   }
 
@@ -112,7 +120,7 @@ billsRouter.post("/generate", requireRole("ADMIN", "HR", "ACCOUNTANT"), async (r
   const incentiveAmt = run.lines.reduce((sum, l) => sum + Number(l.otAmount), 0);
   const result = calculateBill({ basicWages, incentiveAmt });
 
-  const existing = await prisma.bill.findFirst({ where: { payrollRunId: run.id } });
+  const existing = await prisma.bill.findFirst({ where: { payrollRunId: run.id, clientId } });
 
   if (existing) {
     const bill = await prisma.bill.update({
@@ -125,20 +133,13 @@ billsRouter.post("/generate", requireRole("ADMIN", "HR", "ACCOUNTANT"), async (r
     return;
   }
 
-  // Single-client system for now — mirrors reports/bill-register and the client mock.
-  const client = await prisma.client.findFirst();
-  if (!client) {
-    res.status(400).json({ error: "No client configured." });
-    return;
-  }
-
   const billCount = await prisma.bill.count();
   const billNo = String(billCount + 1).padStart(3, "0");
-  const billDate = new Date(Date.UTC(year, month - 1, 28));
+  const billDate = new Date();
 
   const bill = await prisma.bill.create({
     data: {
-      clientId: client.id,
+      clientId,
       payrollRunId: run.id,
       billNo,
       billDate,
@@ -149,6 +150,6 @@ billsRouter.post("/generate", requireRole("ADMIN", "HR", "ACCOUNTANT"), async (r
     include: { client: true, line: true },
   });
 
-  await logAudit({ userId: req.user!.id, action: "CREATE", entityType: "Bill", entityId: bill.id, changes: { billNo, month, year } });
+  await logAudit({ userId: req.user!.id, action: "CREATE", entityType: "Bill", entityId: bill.id, changes: { billNo, month, year, clientId } });
   res.status(201).json(bill);
 });

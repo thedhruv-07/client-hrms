@@ -2,15 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listContractWorkers } from "@/services/contractWorkers";
 import { getPayrollRun, getPayrollLines, saveContractPayrollRun } from "@/services/payrollRuns";
-import { calculateWageLine, sumWageLines } from "@/lib/calc";
-import { downloadWageRegister } from "@/lib/exportExcel";
-import { daysInMonth, monthLabel } from "@/lib/date";
+import { getCompany } from "@/services/company";
+import { listClients } from "@/services/clients";
+import { listBills } from "@/services/bills";
+import { calculateWageLine, sumWageLines, calculateBill } from "@/lib/calc";
+import { downloadWageRegisterWithBill } from "@/lib/exportExcel";
+import { daysInMonth, monthLabel, monthLabelShort } from "@/lib/date";
 import { formatCurrencyPrecise } from "@/lib/format";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableFooter } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StampBadge } from "@/components/ui/stamp-badge";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Download, Save } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
@@ -28,8 +32,16 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
   const maxDays = daysInMonth(month, year);
   const queryClient = useQueryClient();
 
-  const workersQuery = useQuery({ queryKey: ["contract-workers", ""], queryFn: () => listContractWorkers() });
-  const runQuery = useQuery({ queryKey: ["payroll-run", "CONTRACT", month, year], queryFn: () => getPayrollRun(month, year, "CONTRACT") });
+  const clientsQuery = useQuery({ queryKey: ["clients"], queryFn: listClients });
+  const clients = clientsQuery.data ?? [];
+  const [clientId, setClientId] = useState<string>("");
+
+  useEffect(() => {
+    if (!clientId && clientsQuery.data && clientsQuery.data.length > 0) setClientId(clientsQuery.data[0].id);
+  }, [clientId, clientsQuery.data]);
+
+  const workersQuery = useQuery({ queryKey: ["contract-workers", "", clientId], queryFn: () => listContractWorkers(undefined, clientId), enabled: !!clientId });
+  const runQuery = useQuery({ queryKey: ["payroll-run", "CONTRACT", month, year, clientId], queryFn: () => getPayrollRun(month, year, "CONTRACT", clientId), enabled: !!clientId });
   const linesQuery = useQuery({
     queryKey: ["payroll-lines", runQuery.data?.id],
     queryFn: () => getPayrollLines(runQuery.data!.id),
@@ -42,7 +54,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const isLoading = workersQuery.isLoading || runQuery.isLoading || (!!runQuery.data && linesQuery.isLoading);
+  const isLoading = !clientId || workersQuery.isLoading || runQuery.isLoading || (!!runQuery.data && linesQuery.isLoading);
 
   useEffect(() => {
     if (!workersQuery.data) return;
@@ -64,23 +76,46 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
       })
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workersQuery.data, linesQuery.data, runQuery.data, month, year]);
+  }, [workersQuery.data, linesQuery.data, runQuery.data, month, year, clientId]);
 
   function updateRow(workerId: string, patch: Partial<Row>) {
     setRows((prev) => prev?.map((r) => (r.workerId === workerId ? { ...r, ...patch } : r)) ?? prev);
   }
 
-  const computed = useMemo(() => (rows ?? []).map((r) => ({ row: r, result: calculateWageLine(r) })), [rows]);
-  const totals = useMemo(() => sumWageLines((rows ?? []).map((r) => ({ basicSalary: r.basicSalary, workingDays: r.workingDays, otHours: r.otHours, advance: r.advance }))), [rows]);
+  const computed = useMemo(() => (rows ?? []).map((r) => ({ row: r, result: calculateWageLine({ ...r, monthDays: maxDays }) })), [rows, maxDays]);
+  const totals = useMemo(
+    () => sumWageLines((rows ?? []).map((r) => ({ basicSalary: r.basicSalary, monthDays: maxDays, workingDays: r.workingDays, otHours: r.otHours, advance: r.advance }))),
+    [rows, maxDays]
+  );
 
   async function onGenerate() {
     setGenerating(true);
     try {
-      await downloadWageRegister({
+      const client = clients.find((c) => c.id === clientId);
+      if (!client) throw new Error("No client selected — add one in Clients.");
+      const [company, bills] = await Promise.all([getCompany(), listBills(clientId)]);
+      const existingBill = bills.find((b) => b.month === month && b.year === year);
+
+      const round2 = (n: number) => Math.round(n * 100) / 100;
+      const workingDaysTotal = round2(computed.reduce((sum, { row }) => sum + row.workingDays, 0));
+      const esicTotal = round2(computed.reduce((sum, { result }) => sum + result.esic, 0));
+      const lwfTotal = round2(computed.reduce((sum, { result }) => sum + result.lwf, 0));
+      const advanceTotal = round2(computed.reduce((sum, { result }) => sum + result.advance, 0));
+
+      // The bill is always computed live from this same wage register — never from a
+      // possibly-stale persisted Bill — so the two sheets in the download stay internally
+      // consistent even if the register has unsaved edits. Only the bill number/date are
+      // reused from a real persisted Bill when one already exists for this period.
+      const bill = calculateBill({ basicWages: totals.basicEarn, incentiveAmt: totals.otAmount });
+
+      await downloadWageRegisterWithBill({
+        companyName: company.name,
         monthLabel: monthLabel(month, year),
         rows: computed.map(({ row, result }) => ({
           code: row.code,
           name: row.name,
+          basicSalary: row.basicSalary,
+          monthDays: maxDays,
           workingDays: row.workingDays,
           otHours: row.otHours,
           basicEarn: result.basicEarn,
@@ -92,11 +127,40 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
           totalDeduction: result.totalDeduction,
           netPayable: result.netPayable,
         })),
-        totals,
+        totals: {
+          workingDays: workingDaysTotal,
+          basicEarn: totals.basicEarn,
+          otAmount: totals.otAmount,
+          grossEarning: totals.grossEarning,
+          esic: esicTotal,
+          lwf: lwfTotal,
+          advance: advanceTotal,
+          totalDeduction: totals.totalDeduction,
+          netPayable: totals.netPayable,
+        },
+        bill: {
+          billNo: existingBill?.billNo ?? "DRAFT",
+          billDate: existingBill?.billDate ?? new Date().toISOString(),
+          monthLabel: monthLabel(month, year),
+          monthLabelShort: monthLabelShort(month, year),
+          company: {
+            name: company.name,
+            address: company.address,
+            mobile: company.mobile,
+            gstNo: company.gstNo,
+            pfCode: company.pfCode,
+            esiCode: company.esiCode,
+            bankAccount: company.bankAccount,
+            ifsc: company.ifsc,
+            branch: company.branch,
+          },
+          client: { name: client.name, address: client.address, gstNo: client.gstNo, panNo: client.panNo, hsnSac: client.hsnSac },
+          line: bill,
+        },
       });
-      toast({ title: "Wage register downloaded", description: `wage-register-${monthLabel(month, year).toLowerCase()}.xlsx` });
-    } catch {
-      toast({ title: "Could not generate the wage register", variant: "destructive" });
+      toast({ title: "Wage register + bill downloaded", description: `wage-register-bill-${(existingBill?.billNo ?? "draft").toLowerCase()}-${monthLabel(month, year).toLowerCase()}.xlsx` });
+    } catch (err) {
+      toast({ title: "Could not generate the file", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     } finally {
       setGenerating(false);
     }
@@ -109,10 +173,11 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
       await saveContractPayrollRun(
         month,
         year,
+        clientId,
         rows.map((r) => ({ contractWorkerId: r.workerId, workingDays: r.workingDays, otHours: r.otHours, advance: r.advance }))
       );
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["payroll-run", "CONTRACT", month, year] }),
+        queryClient.invalidateQueries({ queryKey: ["payroll-run", "CONTRACT", month, year, clientId] }),
         queryClient.invalidateQueries({ queryKey: ["payroll-lines"] }),
       ]);
       toast({ title: "Wage register saved", description: `${monthLabel(month, year)} — ${rows.length} worker(s).` });
@@ -123,8 +188,12 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
     }
   }
 
-  if (isLoading || !rows) {
+  if (clientsQuery.isLoading) {
     return <Skeleton className="h-96 w-full" />;
+  }
+
+  if (clients.length === 0) {
+    return <p className="text-sm text-muted">No clients yet — add one in Clients before running contract payroll.</p>;
   }
 
   return (
@@ -132,24 +201,41 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h2 className="font-display text-lg font-semibold">{monthLabel(month, year)}</h2>
-          <StampBadge tone={runQuery.data?.status === "FINALIZED" ? "positive" : "ink"}>
-            {runQuery.data?.status ?? "DRAFT"}
-          </StampBadge>
+          {rows ? (
+            <StampBadge tone={runQuery.data?.status === "FINALIZED" ? "positive" : "ink"}>
+              {runQuery.data?.status ?? "DRAFT"}
+            </StampBadge>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
+          <Select value={clientId} onValueChange={setClientId}>
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Select a client" />
+            </SelectTrigger>
+            <SelectContent>
+              {clients.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {!isFinalized ? (
-            <Button onClick={onSave} disabled={saving} variant="outline">
+            <Button onClick={onSave} disabled={saving || isLoading} variant="outline">
               <Save className="size-4" />
               {saving ? "Saving…" : "Save"}
             </Button>
           ) : null}
-          <Button onClick={onGenerate} disabled={generating}>
+          <Button onClick={onGenerate} disabled={generating || isLoading}>
             <Download className="size-4" />
-            {generating ? "Preparing…" : "Download Wage Register (.xlsx)"}
+            {generating ? "Preparing…" : "Download Wage Register + Bill (.xlsx)"}
           </Button>
         </div>
       </div>
 
+      {isLoading || !rows ? (
+        <Skeleton className="h-96 w-full" />
+      ) : (
       <div className="rounded-md border border-border bg-surface">
         <Table>
           <TableHeader>
@@ -234,6 +320,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
           </TableFooter>
         </Table>
       </div>
+      )}
     </div>
   );
 }

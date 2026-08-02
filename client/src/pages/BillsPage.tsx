@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { listBills, generateBill } from "@/services/bills";
+import { listClients } from "@/services/clients";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StampBadge } from "@/components/ui/stamp-badge";
 import { Button } from "@/components/ui/button";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { formatCurrencyPrecise } from "@/lib/format";
 import { monthLabel } from "@/lib/date";
@@ -16,16 +18,22 @@ export function BillsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { period } = usePeriod();
-  const { data: bills, isLoading } = useQuery({ queryKey: ["bills"], queryFn: listBills });
+  const { data: bills, isLoading } = useQuery({ queryKey: ["bills"], queryFn: () => listBills() });
+  const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: listClients });
+  const [clientId, setClientId] = useState<string>("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
 
-  const existingBill = (bills ?? []).find((b) => b.month === period.month && b.year === period.year) ?? null;
+  useEffect(() => {
+    if (!clientId && clients && clients.length > 0) setClientId(clients[0].id);
+  }, [clientId, clients]);
+
+  const existingBill = (bills ?? []).find((b) => b.month === period.month && b.year === period.year && b.clientId === clientId) ?? null;
   const label = monthLabel(period.month, period.year);
 
   async function runGenerate() {
     try {
-      const bill = await generateBill(period.month, period.year);
+      const bill = await generateBill(period.month, period.year, clientId);
       await queryClient.invalidateQueries({ queryKey: ["bills"] });
       toast({ title: existingBill ? "Bill regenerated" : "Bill generated", description: `Bill No. ${bill.billNo} for ${label}.` });
     } catch (err) {
@@ -50,15 +58,29 @@ export function BillsPage() {
           <h1 className="font-display text-2xl font-semibold">Bills</h1>
           <p className="text-sm text-muted">Client GST bills generated per payroll run</p>
         </div>
-        {!isLoading ? (
-          existingBill ? (
-            <Button variant="outline" onClick={() => setConfirmOpen(true)}>
-              Regenerate Bill for {label}
-            </Button>
-          ) : (
-            <Button onClick={runGenerate}>Generate Bill for {label}</Button>
-          )
-        ) : null}
+        <div className="flex items-center gap-2">
+          <Select value={clientId} onValueChange={setClientId}>
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Select a client" />
+            </SelectTrigger>
+            <SelectContent>
+              {(clients ?? []).map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {!isLoading && clientId ? (
+            existingBill ? (
+              <Button variant="outline" onClick={() => setConfirmOpen(true)}>
+                Regenerate Bill for {label}
+              </Button>
+            ) : (
+              <Button onClick={runGenerate}>Generate Bill for {label}</Button>
+            )
+          ) : null}
+        </div>
       </div>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>

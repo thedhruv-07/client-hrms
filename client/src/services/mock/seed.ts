@@ -11,7 +11,7 @@ import type {
   User,
 } from "@/types";
 import { calculateWageLine, sumWageLines, calculateBill, calculateInHouseWageLine } from "@/lib/calc";
-import { monthLabel } from "@/lib/date";
+import { monthLabel, daysInMonth } from "@/lib/date";
 
 // No real bank/GST/PAN/mobile data here — those fields stay null even
 // though the company/client names ("Lucky Enterprises", "Wide India
@@ -58,13 +58,13 @@ export const users: User[] = [
 // is back-solved from the known Gross Earning figures. The rest are
 // synthetic, added so lists/tables don't look like a 3-row toy.
 export const contractWorkers: ContractWorker[] = [
-  { id: "cw-1", code: "CW-001", name: "Arun", basicSalary: "17000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
-  { id: "cw-2", code: "CW-002", name: "Biru Kumar", basicSalary: "17000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
-  { id: "cw-3", code: "CW-003", name: "Suraj", basicSalary: "17000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
-  { id: "cw-4", code: "CW-004", name: "Deepak Yadav", basicSalary: "18000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
-  { id: "cw-5", code: "CW-005", name: "Manoj Kumar", basicSalary: "16000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
-  { id: "cw-6", code: "CW-006", name: "Ravi Shankar", basicSalary: "19000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
-  { id: "cw-7", code: "CW-007", name: "Sunita Devi", basicSalary: "15000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "INACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-03-15T00:00:00.000Z" },
+  { id: "cw-1", code: "CW-001", name: "Arun", clientId: "client-1", basicSalary: "17000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+  { id: "cw-2", code: "CW-002", name: "Biru Kumar", clientId: "client-1", basicSalary: "17000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+  { id: "cw-3", code: "CW-003", name: "Suraj", clientId: "client-1", basicSalary: "17000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+  { id: "cw-4", code: "CW-004", name: "Deepak Yadav", clientId: "client-1", basicSalary: "18000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+  { id: "cw-5", code: "CW-005", name: "Manoj Kumar", clientId: "client-1", basicSalary: "16000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+  { id: "cw-6", code: "CW-006", name: "Ravi Shankar", clientId: "client-1", basicSalary: "19000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" },
+  { id: "cw-7", code: "CW-007", name: "Sunita Devi", clientId: "client-1", basicSalary: "15000.00", bankAccount: null, ifsc: null, pfNo: null, esicNo: null, uan: null, status: "INACTIVE", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-03-15T00:00:00.000Z" },
 ];
 
 export const inHouseEmployees: InHouseEmployee[] = [
@@ -122,15 +122,17 @@ MONTHS.forEach(({ month, year }, monthIndex) => {
     month,
     year,
     type: "CONTRACT",
+    clientId: client.id,
     status: isLatest ? "DRAFT" : "FINALIZED",
     createdById: "user-hr",
     createdAt: `${year}-${String(month).padStart(2, "0")}-28T00:00:00.000Z`,
     updatedAt: `${year}-${String(month).padStart(2, "0")}-28T00:00:00.000Z`,
   });
 
+  const monthDays = daysInMonth(month, year);
   activeContractWorkers.forEach((worker, i) => {
     const input = contractLineInputs[i]!;
-    const wageInput = { basicSalary: Number(worker.basicSalary), ...input };
+    const wageInput = { basicSalary: Number(worker.basicSalary), monthDays, ...input };
     const result = calculateWageLine(wageInput);
     payrollLines.push({
       id: `line-${contractRunId}-${worker.id}`,
@@ -157,7 +159,7 @@ MONTHS.forEach(({ month, year }, monthIndex) => {
 
   if (!isLatest) {
     // Bill only for finalized runs.
-    const wageTotals = sumWageLines(activeContractWorkers.map((w, i) => ({ basicSalary: Number(w.basicSalary), ...contractLineInputs[i]! })));
+    const wageTotals = sumWageLines(activeContractWorkers.map((w, i) => ({ basicSalary: Number(w.basicSalary), monthDays, ...contractLineInputs[i]! })));
     const bill = calculateBill({ basicWages: wageTotals.basicEarn, incentiveAmt: wageTotals.otAmount });
     const billId = `bill-${year}-${month}`;
     const billNo = String(billCounter++).padStart(3, "0");
@@ -203,6 +205,7 @@ MONTHS.forEach(({ month, year }, monthIndex) => {
     month,
     year,
     type: "INHOUSE",
+    clientId: null,
     status: isLatest ? "DRAFT" : "FINALIZED",
     createdById: "user-hr",
     createdAt: `${year}-${String(month).padStart(2, "0")}-28T00:00:00.000Z`,
