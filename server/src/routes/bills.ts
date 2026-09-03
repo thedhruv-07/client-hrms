@@ -7,6 +7,10 @@ import { queryString } from "../lib/query";
 import { calculateBill } from "../engine/bill";
 import { generateBillPdf } from "../export/billPdf";
 
+// ponytail: 8 bills were already issued outside this system before it went
+// live; bump the sequence so the next bill created here continues at 009.
+const BILL_NO_START_OFFSET = 8;
+
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 function monthLabel(month: number, year: number): string {
   return `${MONTH_NAMES[month - 1] ?? ""} ${year}`;
@@ -214,7 +218,7 @@ billsRouter.post("/generate", requireRole("ADMIN", "HR", "ACCOUNTANT"), async (r
   }
 
   const billCount = await prisma.bill.count();
-  const billNo = String(billCount + 1).padStart(3, "0");
+  const billNo = String(billCount + 1 + BILL_NO_START_OFFSET).padStart(3, "0");
   const billDate = new Date();
 
   const bill = await prisma.bill.create({

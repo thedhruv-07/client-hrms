@@ -18,7 +18,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ContractWorkerForm, contractWorkerToDefaults } from "@/components/contract-worker-form";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { toast } from "@/hooks/use-toast";
-import { formatCurrencyPrecise } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 import { parseWorkerWorkbook } from "@/lib/workerImport";
 import { downloadWorkerDetailsSheet } from "@/lib/exportExcel";
 
@@ -156,7 +156,7 @@ export function WorkersPage() {
       {
         accessorKey: "basicSalary",
         header: () => <div className="text-right">Basic Salary</div>,
-        cell: (info) => <div className="figure text-right">{formatCurrencyPrecise(Number(info.getValue<string>()))}</div>,
+        cell: (info) => <div className="figure text-right">{formatCurrency(Number(info.getValue<string>()))}</div>,
       },
       {
         accessorKey: "status",
@@ -402,27 +402,27 @@ export function WorkersPage() {
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted">Basic Salary</dt>
-                    <dd className="figure">{formatCurrencyPrecise(Number(selected.basicSalary))}</dd>
+                    <dd className="figure">{formatCurrency(Number(selected.basicSalary))}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted">HRA</dt>
-                    <dd className="figure">{formatCurrencyPrecise(Number(selected.hra))}</dd>
+                    <dd className="figure">{formatCurrency(Number(selected.hra))}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted">TA</dt>
-                    <dd className="figure">{formatCurrencyPrecise(Number(selected.ta))}</dd>
+                    <dd className="figure">{formatCurrency(Number(selected.ta))}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted">Medical Allow.</dt>
-                    <dd className="figure">{formatCurrencyPrecise(Number(selected.medicalAllow))}</dd>
+                    <dd className="figure">{formatCurrency(Number(selected.medicalAllow))}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted">CEA</dt>
-                    <dd className="figure">{formatCurrencyPrecise(Number(selected.cea))}</dd>
+                    <dd className="figure">{formatCurrency(Number(selected.cea))}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted">Misc. Allow</dt>
-                    <dd className="figure">{formatCurrencyPrecise(Number(selected.miscAllow))}</dd>
+                    <dd className="figure">{formatCurrency(Number(selected.miscAllow))}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted">Status</dt>

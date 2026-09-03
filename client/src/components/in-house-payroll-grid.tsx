@@ -5,7 +5,7 @@ import { getPayrollRun, getPayrollLines } from "@/services/payrollRuns";
 import { calculateInHouseWageLine, sumInHouseWageLines } from "@/lib/calc";
 import { downloadInHousePayroll } from "@/lib/exportExcel";
 import { monthLabel } from "@/lib/date";
-import { formatCurrencyPrecise } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableFooter } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -182,21 +182,21 @@ export function InHousePayrollGrid({ month, year }: { month: number; year: numbe
                     onChange={(e) => updateRow(row.employeeId, { advance: Number(e.target.value) })}
                   />
                 </TableCell>
-                <TableCell className="figure text-right font-medium">{formatCurrencyPrecise(result.grossEarning)}</TableCell>
-                <TableCell className="figure text-right">{formatCurrencyPrecise(result.pf)}</TableCell>
-                <TableCell className="figure text-right">{formatCurrencyPrecise(result.esic)}</TableCell>
-                <TableCell className="figure text-right text-danger">{formatCurrencyPrecise(result.totalDeduction)}</TableCell>
-                <TableCell className="figure text-right font-semibold text-positive">{formatCurrencyPrecise(result.netPayable)}</TableCell>
+                <TableCell className="figure text-right font-medium">{formatCurrency(result.grossEarning)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrency(result.pf)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrency(result.esic)}</TableCell>
+                <TableCell className="figure text-right text-danger">{formatCurrency(result.totalDeduction)}</TableCell>
+                <TableCell className="figure text-right font-semibold text-positive">{formatCurrency(result.netPayable)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
           <TableFooter>
             <TableRow>
               <TableCell colSpan={6}>Totals</TableCell>
-              <TableCell className="figure text-right">{formatCurrencyPrecise(totals.grossEarning)}</TableCell>
+              <TableCell className="figure text-right">{formatCurrency(totals.grossEarning)}</TableCell>
               <TableCell colSpan={2} />
-              <TableCell className="figure text-right text-danger">{formatCurrencyPrecise(totals.totalDeduction)}</TableCell>
-              <TableCell className="figure text-right text-positive">{formatCurrencyPrecise(totals.netPayable)}</TableCell>
+              <TableCell className="figure text-right text-danger">{formatCurrency(totals.totalDeduction)}</TableCell>
+              <TableCell className="figure text-right text-positive">{formatCurrency(totals.netPayable)}</TableCell>
             </TableRow>
           </TableFooter>
         </Table>

@@ -101,16 +101,12 @@ export interface WageResult {
   netPayable: number;
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
 /** ESIC and Welfare round UP to the nearest whole rupee in the source sheet — never round down a statutory contribution. */
 function roundUp0(n: number): number {
   return Math.ceil(n);
 }
 
-/** PF (employee EPF 12%) rounds to the nearest whole rupee, not up. */
+/** Every money field rounds to the nearest whole rupee, no paisa anywhere. */
 function round0(n: number): number {
   return Math.round(n);
 }
@@ -206,28 +202,28 @@ export function calculateWageLine(input: WageInput): WageResult {
   const employerEsic = roundUp0(raw.employerEsic);
   const otEsic = roundUp0(raw.otEsic);
   const lwf = roundUp0(raw.lwf);
-  const advance = round2(raw.advance);
-  const tds = round2(raw.tds);
-  const otherDeduction = round2(raw.otherDeduction);
-  const leaveEncashment = round2(raw.leaveEncashment);
-  const arrears = round2(raw.arrears);
-  const bonus = round2(raw.bonus);
+  const advance = round0(raw.advance);
+  const tds = round0(raw.tds);
+  const otherDeduction = round0(raw.otherDeduction);
+  const leaveEncashment = round0(raw.leaveEncashment);
+  const arrears = round0(raw.arrears);
+  const bonus = round0(raw.bonus);
   const totalDeduction = otherDeduction + advance + tds + pf + esic + lwf + otEsic;
-  const grossEarning = round2(raw.grossEarning);
+  const grossEarning = round0(raw.grossEarning);
   return {
-    workingDays: round2(raw.workingDays),
-    basicEarn: round2(raw.basicEarn),
-    hraEarn: round2(raw.hraEarn),
-    taEarn: round2(raw.taEarn),
-    medicalEarn: round2(raw.medicalEarn),
-    ceaEarn: round2(raw.ceaEarn),
-    miscEarn: round2(raw.miscEarn),
-    otAmount: round2(raw.otAmount),
-    incentive: round2(raw.incentive),
-    attendAward: round2(raw.attendAward),
-    nightAllowance: round2(raw.nightAllowance),
-    otArrear: round2(raw.otArrear),
-    grossWagesErnd: round2(raw.grossWagesErnd),
+    workingDays: round0(raw.workingDays),
+    basicEarn: round0(raw.basicEarn),
+    hraEarn: round0(raw.hraEarn),
+    taEarn: round0(raw.taEarn),
+    medicalEarn: round0(raw.medicalEarn),
+    ceaEarn: round0(raw.ceaEarn),
+    miscEarn: round0(raw.miscEarn),
+    otAmount: round0(raw.otAmount),
+    incentive: round0(raw.incentive),
+    attendAward: round0(raw.attendAward),
+    nightAllowance: round0(raw.nightAllowance),
+    otArrear: round0(raw.otArrear),
+    grossWagesErnd: round0(raw.grossWagesErnd),
     grossEarning,
     pf,
     esic,
@@ -241,7 +237,7 @@ export function calculateWageLine(input: WageInput): WageResult {
     arrears,
     bonus,
     totalDeduction,
-    netPayable: round2(grossEarning + arrears + bonus + leaveEncashment - totalDeduction),
+    netPayable: round0(grossEarning + arrears + bonus + leaveEncashment - totalDeduction),
   };
 }
 
@@ -260,8 +256,8 @@ export function sumWageLines(
 ): Omit<WageResult, "pf" | "esic" | "employerEsic" | "otEsic" | "lwf" | "advance" | "tds" | "otherDeduction"> {
   const raws = lines.map(computeRaw);
   const rows = lines.map(calculateWageLine);
-  const sumRaw = (pick: (r: ReturnType<typeof computeRaw>) => number) => round2(raws.reduce((acc, r) => acc + pick(r), 0));
-  const sumRounded = (pick: (r: WageResult) => number) => round2(rows.reduce((acc, r) => acc + pick(r), 0));
+  const sumRaw = (pick: (r: ReturnType<typeof computeRaw>) => number) => round0(raws.reduce((acc, r) => acc + pick(r), 0));
+  const sumRounded = (pick: (r: WageResult) => number) => round0(rows.reduce((acc, r) => acc + pick(r), 0));
 
   const grossEarning = sumRaw((r) => r.grossEarning);
   const totalDeduction = sumRounded((r) => r.totalDeduction);
@@ -288,6 +284,6 @@ export function sumWageLines(
     bonus,
     leaveEncashment,
     totalDeduction,
-    netPayable: round2(grossEarning + arrears + bonus + leaveEncashment - totalDeduction),
+    netPayable: round0(grossEarning + arrears + bonus + leaveEncashment - totalDeduction),
   };
 }

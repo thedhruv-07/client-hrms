@@ -1,4 +1,4 @@
-import { formatCurrencyPrecise } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 import { amountInWords } from "@/lib/exportExcel";
 
 export interface SalarySlipLine {
@@ -81,7 +81,7 @@ function attendanceRows(a: SalarySlipAttendance): string[] {
 }
 
 function deductionRows(lines: SalarySlipLine[]): string[] {
-  return lines.map((l) => `${l.label} : ${formatCurrencyPrecise(l.amount)}`);
+  return lines.map((l) => `${l.label} : ${formatCurrency(l.amount)}`);
 }
 
 /**
@@ -136,8 +136,8 @@ export function SalarySlip({ data }: { data: SalarySlipData }) {
                 <td className="figure whitespace-nowrap border border-border px-2 py-1">{r.emp ?? ""}</td>
                 <td className="figure whitespace-nowrap border border-border px-2 py-1">{r.att ?? ""}</td>
                 <td className="whitespace-nowrap border border-border px-2 py-1">{r.earn?.label ?? ""}</td>
-                <td className="figure whitespace-nowrap border border-border px-2 py-1 text-right">{r.earn ? formatCurrencyPrecise(r.earn.rate) : ""}</td>
-                <td className="figure whitespace-nowrap border border-border px-2 py-1 text-right">{r.earn ? formatCurrencyPrecise(r.earn.payable) : ""}</td>
+                <td className="figure whitespace-nowrap border border-border px-2 py-1 text-right">{r.earn ? formatCurrency(r.earn.rate) : ""}</td>
+                <td className="figure whitespace-nowrap border border-border px-2 py-1 text-right">{r.earn ? formatCurrency(r.earn.payable) : ""}</td>
                 <td className="figure whitespace-nowrap border border-border px-2 py-1">{r.ded ?? ""}</td>
               </tr>
             ))}
@@ -145,16 +145,16 @@ export function SalarySlip({ data }: { data: SalarySlipData }) {
               <td className="border border-border px-2 py-1" />
               <td className="border border-border px-2 py-1" />
               <td className="border border-border px-2 py-1">Total :</td>
-              <td className="figure border border-border px-2 py-1 text-right">{formatCurrencyPrecise(rateTotal)}</td>
-              <td className="figure border border-border px-2 py-1 text-right">{formatCurrencyPrecise(data.grossEarning)}</td>
-              <td className="figure border border-border px-2 py-1 text-right">{formatCurrencyPrecise(data.totalDeduction)}</td>
+              <td className="figure border border-border px-2 py-1 text-right">{formatCurrency(rateTotal)}</td>
+              <td className="figure border border-border px-2 py-1 text-right">{formatCurrency(data.grossEarning)}</td>
+              <td className="figure border border-border px-2 py-1 text-right">{formatCurrency(data.totalDeduction)}</td>
             </tr>
           </tbody>
         </table>
       </div>
 
       <div className="mt-4 flex items-baseline justify-between gap-4 rounded-sm border-2 border-foreground/60 px-3 py-2.5 text-base font-semibold">
-        <span>NET SALARY : {formatCurrencyPrecise(data.netPayable)}</span>
+        <span>NET SALARY : {formatCurrency(data.netPayable)}</span>
         <span className="figure text-xs font-normal italic text-muted">{amountInWords(data.netPayable)}</span>
       </div>
 

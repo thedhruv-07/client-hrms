@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 
-const MONEY_FORMAT = "#,##0.00";
+const MONEY_FORMAT = "#,##0";
 
 /** Triggers a browser file-save for an in-memory blob — shared by every download function that needs one. */
 export function downloadBlob(blob: Blob, filename: string): void {
@@ -15,9 +15,39 @@ export function downloadBlob(blob: Blob, filename: string): void {
 }
 
 async function downloadWorkbook(workbook: ExcelJS.Workbook, filename: string): Promise<void> {
+  applyGridBorders(workbook);
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   downloadBlob(blob, filename);
+}
+
+/**
+ * Full box border on every cell in every sheet's used range, run once right before writing the
+ * buffer — the single choke point every download function funnels through — instead of touching
+ * each sheet-writer's own border calls. Walks row/column indices explicitly (not `eachRow`/
+ * `eachCell`, which only visit cells that already hold a value) so sparse rows — e.g. the Bill
+ * sheet's single-cell label rows where only column A and D are ever assigned — still get a
+ * border on every column in between, not just the two that happen to have a value. Preserves any
+ * side a sheet already set (e.g. a bold divider) and only fills in the sides left unset.
+ */
+function applyGridBorders(workbook: ExcelJS.Workbook): void {
+  for (const sheet of workbook.worksheets) {
+    const lastRow = sheet.lastRow?.number ?? 0;
+    const lastCol = sheet.columnCount;
+    for (let r = 1; r <= lastRow; r++) {
+      const row = sheet.getRow(r);
+      for (let c = 1; c <= lastCol; c++) {
+        const cell = row.getCell(c);
+        const existing = cell.border ?? {};
+        cell.border = {
+          top: existing.top ?? THIN_GREY,
+          left: existing.left ?? THIN_GREY,
+          bottom: existing.bottom ?? THIN_GREY,
+          right: existing.right ?? THIN_GREY,
+        };
+      }
+    }
+  }
 }
 
 function styleHeaderRow(row: ExcelJS.Row) {
@@ -353,6 +383,10 @@ function writeWageRegisterSheet(sheet: ExcelJS.Worksheet, data: { companyName: s
       switch (col) {
         case "C":
           return "TOTAL";
+        case "M":
+          return { formula: `SUM(M${firstDataRow}:M${lastDataRow})`, result: data.rows.reduce((sum, r) => sum + r.actualPresentDays, 0) };
+        case "N":
+          return { formula: `SUM(N${firstDataRow}:N${lastDataRow})`, result: data.rows.reduce((sum, r) => sum + r.weekOffHoliday, 0) };
         case "R":
           return { formula: `SUM(R${firstDataRow}:R${lastDataRow})`, result: data.totals.basicEarn };
         case "T":
@@ -514,6 +548,8 @@ function writeOtCalculationSheet(sheet: ExcelJS.Worksheet, data: { companyName: 
       switch (col) {
         case "D":
           return "Total";
+        case "H":
+          return { formula: `SUM(H${firstDataRow}:H${lastDataRow})`, result: data.rows.reduce((sum, r) => sum + r.otHours, 0) };
         case "K":
           return { formula: `SUM(K${firstDataRow}:K${lastDataRow})`, result: data.totals.otAmount };
         case "M":
@@ -690,7 +726,7 @@ function writeSlipSheet(sheet: ExcelJS.Worksheet, slip: SalarySlipExportData) {
     `OT : ${a.otHours}`,
   ];
 
-  const dedRows = slip.deductions.map((l) => `${l.label} : ${l.amount.toFixed(2)}`);
+  const dedRows = slip.deductions.map((l) => `${l.label} : ${Math.round(l.amount)}`);
 
   const gridHeader = sheet.addRow(["Employee Details", "Attendance", "Allowance", "", "Payable", "Deductions"]);
   sheet.mergeCells(gridHeader.number, 3, gridHeader.number, 4);
@@ -879,7 +915,6 @@ function writeBillSheet(sheet: ExcelJS.Worksheet, data: BillExportData, wageRef?
   header.alignment = { horizontal: "center", vertical: "middle" };
   header.eachCell((cell) => {
     cell.fill = HEADER_FILL;
-    cell.border = { bottom: THIN_GREY };
   });
   header.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
 
@@ -905,7 +940,6 @@ function writeBillSheet(sheet: ExcelJS.Worksheet, data: BillExportData, wageRef?
   const total1Row = sheet.addRow(["TOTAL (1)"]);
   total1Row.getCell(4).value = { formula: `SUM(D${basicWagesRowNum}:D${incentiveRowNum})`, result: line.total1 };
   total1Row.font = { bold: true, size: 11, name: BILL_SHEET_FONT };
-  total1Row.eachCell((cell) => (cell.border = { top: THIN_GREY }));
   const total1RowNum = total1Row.number;
 
   const esi325Row = sheet.addRow(["ESI @ 3.25% ON"]);
@@ -930,7 +964,6 @@ function writeBillSheet(sheet: ExcelJS.Worksheet, data: BillExportData, wageRef?
   const total2Row = sheet.addRow(["TOTAL (2)"]);
   total2Row.getCell(4).value = { formula: `SUM(D${total1RowNum}:D${serviceRow.number})`, result: line.total2 };
   total2Row.font = { bold: true, size: 11, name: BILL_SHEET_FONT };
-  total2Row.eachCell((cell) => (cell.border = { top: THIN_GREY }));
   const total2RowNum = total2Row.number;
 
   const cgstRow = sheet.addRow(["CGST @ 9% on"]);
@@ -947,7 +980,6 @@ function writeBillSheet(sheet: ExcelJS.Worksheet, data: BillExportData, wageRef?
   grandTotalRow.getCell(4).value = { formula: `SUM(D${total2RowNum}:D${sgstRow.number})`, result: line.grandTotal };
   grandTotalRow.eachCell((cell) => {
     cell.font = { bold: true, size: 13, name: BILL_SHEET_FONT };
-    cell.border = { top: MEDIUM_GREY, bottom: MEDIUM_GREY };
   });
 
   sheet.addRow([]);

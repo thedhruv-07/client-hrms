@@ -9,11 +9,11 @@ import { calculateWageLine, sumWageLines } from "./wage";
 test("YOGESH (basic 15221, 12 present + 3 week-off, 13 OT hrs, no HRA/incentive/award)", () => {
   const r = calculateWageLine({ basicSalary: 15221, monthDays: 30, actualPresentDays: 12, weekOffHoliday: 3, otHours: 13 });
   assert.equal(r.workingDays, 15);
-  assert.equal(r.basicEarn, 7610.5);
+  assert.equal(r.basicEarn, 7611); // 7610.5 rounded to the nearest whole rupee
   assert.equal(r.hraEarn, 0);
-  assert.equal(r.otAmount, 1648.94); // basic/30/8*13*2 — double rate
+  assert.equal(r.otAmount, 1649); // basic/30/8*13*2 = 1648.94 — double rate
   assert.equal(r.incentive, 0);
-  assert.equal(r.grossWagesErnd, 7610.5);
+  assert.equal(r.grossWagesErnd, 7611);
   assert.equal(r.pf, 913); // ROUND(min(7610.5,15000)*12%, 0)
   assert.equal(r.esic, 58); // ROUNDUP(7610.5*0.75%, 0)
   assert.equal(r.employerEsic, 248); // ROUNDUP(7610.5*3.25%, 0)
@@ -24,8 +24,8 @@ test("YOGESH (basic 15221, 12 present + 3 week-off, 13 OT hrs, no HRA/incentive/
 
 test("PRAKASH (basic 19426, 11 paid days, 46 OT hrs, incentive allow rate 1000)", () => {
   const r = calculateWageLine({ basicSalary: 19426, monthDays: 30, actualPresentDays: 11, weekOffHoliday: 0, otHours: 46, incentiveAllowRate: 1000 });
-  assert.equal(r.otAmount, 7446.63); // 19426/30/8*46*2
-  assert.equal(r.incentive, 366.67); // 1000/30*11 = 366.666... -> paisa precision
+  assert.equal(r.otAmount, 7447); // 19426/30/8*46*2 = 7446.63 -> nearest rupee
+  assert.equal(r.incentive, 367); // 1000/30*11 = 366.67 -> nearest rupee
 });
 
 test("TA/Medical/CEA earn prorated the same way as basic; Misc rounds to the rupee at the per-worker cell", () => {
@@ -89,7 +89,7 @@ test("TDS and Other Deduction reduce net payable; Leave Encashment/Arrears/Bonus
     bonus: 400,
   });
   assert.equal(withExtras.totalDeduction, base.totalDeduction + 150);
-  assert.equal(withExtras.netPayable, round2(base.netPayable - 150 + 300 + 200 + 400));
+  assert.equal(withExtras.netPayable, round0(base.netPayable - 150 + 300 + 200 + 400));
 });
 
 test("zero attendance and zero OT hours nets to zero minus any advance", () => {
@@ -116,10 +116,10 @@ test("register totals: earned figures sum raw per-worker values, deductions sum 
   ];
   const totals = sumWageLines(inputs);
   const [a, b] = inputs.map((i) => calculateWageLine(i));
-  assert.equal(totals.totalDeduction, round2(a!.totalDeduction + b!.totalDeduction));
-  assert.equal(totals.basicEarn, round2((15221 / 30) * 15 + (19426 / 30) * 11));
+  assert.equal(totals.totalDeduction, round0(a!.totalDeduction + b!.totalDeduction));
+  assert.equal(totals.basicEarn, round0((15221 / 30) * 15 + (19426 / 30) * 11));
 });
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+function round0(n: number): number {
+  return Math.round(n);
 }

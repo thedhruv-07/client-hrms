@@ -6,9 +6,9 @@ import { getCompany } from "@/services/company";
 import { listClients } from "@/services/clients";
 import { listBills } from "@/services/bills";
 import { calculateWageLine, sumWageLines, calculateBill, type WageResult } from "@/lib/calc";
-import { downloadWageRegisterWithBill, downloadNeftSheet } from "@/lib/exportExcel";
+import { downloadWageRegisterWithBill, downloadBill, downloadNeftSheet, type BillExportData } from "@/lib/exportExcel";
 import { daysInMonth, monthLabel, monthLabelShort } from "@/lib/date";
-import { formatCurrencyPrecise } from "@/lib/format";
+import { formatCurrency, formatNumber } from "@/lib/format";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableFooter } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -126,6 +126,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [neftGenerating, setNeftGenerating] = useState(false);
+  const [billGenerating, setBillGenerating] = useState(false);
   const [page, setPage] = useState(0);
 
   useEffect(() => {
@@ -192,6 +193,17 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
   const safePage = Math.min(page, pageCount - 1);
   const pagedComputed = computed.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
+  // Attendance columns aren't part of WageResult (they're raw per-row input, not engine output),
+  // so their footer totals are summed directly from the rows here.
+  const attendanceTotals = useMemo(
+    () => ({
+      presentDays: computed.reduce((sum, { row }) => sum + row.actualPresentDays, 0),
+      weekOffHoliday: computed.reduce((sum, { row }) => sum + row.weekOffHoliday, 0),
+      otHours: computed.reduce((sum, { row }) => sum + row.otHours, 0),
+    }),
+    [computed]
+  );
+
   // sumWageLines omits the statutory-deduction totals (they're per-worker-rounded, see wage.ts) —
   // sum the already-rounded per-worker results here instead, for both the on-screen footer and export.
   const deductionTotals = useMemo(() => {
@@ -205,13 +217,55 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
     };
   }, [computed]);
 
+  // The bill is always computed live from this same wage register — never from a possibly-stale
+  // persisted Bill — so the sheets in the download stay internally consistent even if the
+  // register has unsaved edits. Only the bill number/date are reused from a real persisted Bill
+  // when one already exists for this period. Shared by the combined wage-register+bill download
+  // and the standalone bill-only download.
+  async function buildBillExportData(): Promise<{ company: Awaited<ReturnType<typeof getCompany>>; billData: BillExportData }> {
+    const client = clients.find((c) => c.id === clientId);
+    if (!client) throw new Error("No client selected — add one in Clients.");
+    const [company, bills] = await Promise.all([getCompany(), listBills(clientId)]);
+    const existingBill = bills.find((b) => b.month === month && b.year === year);
+
+    const bill = calculateBill({
+      workerBasicEarnings: computed.map(({ result }) => result.basicEarn),
+      workerHraEarnings: computed.map(({ result }) => result.hraEarn),
+      otAmount: totals.otAmount,
+      attendAward: totals.attendAward,
+      incentiveAmt: totals.incentive,
+      lwf: deductionTotals.lwf * 2,
+    });
+
+    return {
+      company,
+      billData: {
+        billNo: existingBill?.billNo ?? "DRAFT",
+        billDate: existingBill?.billDate ?? new Date().toISOString(),
+        monthLabel: monthLabel(month, year),
+        monthLabelShort: monthLabelShort(month, year),
+        company: {
+          name: company.name,
+          address: company.address,
+          mobile: company.mobile,
+          email: company.email,
+          gstNo: company.gstNo,
+          pfCode: company.pfCode,
+          esiCode: company.esiCode,
+          bankAccount: company.bankAccount,
+          ifsc: company.ifsc,
+          branch: company.branch,
+        },
+        client: { name: client.name, address: client.address, gstNo: client.gstNo, panNo: client.panNo, hsnSac: client.hsnSac },
+        line: bill,
+      },
+    };
+  }
+
   async function onGenerate() {
     setGenerating(true);
     try {
-      const client = clients.find((c) => c.id === clientId);
-      if (!client) throw new Error("No client selected — add one in Clients.");
-      const [company, bills] = await Promise.all([getCompany(), listBills(clientId)]);
-      const existingBill = bills.find((b) => b.month === month && b.year === year);
+      const { company, billData } = await buildBillExportData();
 
       const round2 = (n: number) => Math.round(n * 100) / 100;
       // Regular-wages-stream deduction/net figures for the Salary Sheet — excludes otEsic,
@@ -224,19 +278,6 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
       const otGrossPayableTotal = round2(totals.otAmount + totals.nightAllowance + totals.attendAward + totals.incentive);
       const otTotalGrossPayableTotal = round2(otGrossPayableTotal + totals.otArrear);
       const otNetPayableTotal = round2(otTotalGrossPayableTotal - deductionTotals.otEsic);
-
-      // The bill is always computed live from this same wage register — never from a
-      // possibly-stale persisted Bill — so the sheets in the download stay internally
-      // consistent even if the register has unsaved edits. Only the bill number/date are
-      // reused from a real persisted Bill when one already exists for this period.
-      const bill = calculateBill({
-        workerBasicEarnings: computed.map(({ result }) => result.basicEarn),
-        workerHraEarnings: computed.map(({ result }) => result.hraEarn),
-        otAmount: totals.otAmount,
-        attendAward: totals.attendAward,
-        incentiveAmt: totals.incentive,
-        lwf: deductionTotals.lwf * 2,
-      });
 
       await downloadWageRegisterWithBill({
         companyName: company.name,
@@ -336,32 +377,26 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
           otEsic: deductionTotals.otEsic,
           netPayable: otNetPayableTotal,
         },
-        bill: {
-          billNo: existingBill?.billNo ?? "DRAFT",
-          billDate: existingBill?.billDate ?? new Date().toISOString(),
-          monthLabel: monthLabel(month, year),
-          monthLabelShort: monthLabelShort(month, year),
-          company: {
-            name: company.name,
-            address: company.address,
-            mobile: company.mobile,
-            email: company.email,
-            gstNo: company.gstNo,
-            pfCode: company.pfCode,
-            esiCode: company.esiCode,
-            bankAccount: company.bankAccount,
-            ifsc: company.ifsc,
-            branch: company.branch,
-          },
-          client: { name: client.name, address: client.address, gstNo: client.gstNo, panNo: client.panNo, hsnSac: client.hsnSac },
-          line: bill,
-        },
+        bill: billData,
       });
-      toast({ title: "Wage register + bill downloaded", description: `wage-register-bill-${(existingBill?.billNo ?? "draft").toLowerCase()}-${monthLabel(month, year).toLowerCase()}.xlsx` });
+      toast({ title: "Wage register + bill downloaded", description: `wage-register-bill-${billData.billNo.toLowerCase()}-${monthLabel(month, year).toLowerCase()}.xlsx` });
     } catch (err) {
       toast({ title: "Could not generate the file", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function onDownloadBill() {
+    setBillGenerating(true);
+    try {
+      const { billData } = await buildBillExportData();
+      await downloadBill(billData);
+      toast({ title: "Bill downloaded", description: `bill-${billData.billNo.toLowerCase()}-${monthLabel(month, year).toLowerCase()}.xlsx` });
+    } catch (err) {
+      toast({ title: "Could not generate the bill", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setBillGenerating(false);
     }
   }
 
@@ -466,6 +501,10 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
             <Download className="size-4" />
             {neftGenerating ? "Preparing…" : <><span className="hidden sm:inline">Download Bank NEFT Sheet (.xlsx)</span><span className="sm:hidden">NEFT Sheet</span></>}
           </Button>
+          <Button variant="outline" onClick={onDownloadBill} disabled={billGenerating || isLoading}>
+            <Download className="size-4" />
+            {billGenerating ? "Preparing…" : <><span className="hidden sm:inline">Download Bill (.xlsx)</span><span className="sm:hidden">Bill</span></>}
+          </Button>
           <Button onClick={onGenerate} disabled={generating || isLoading}>
             <Download className="size-4" />
             {generating ? "Preparing…" : <><span className="hidden sm:inline">Download Wage Register + Bill (.xlsx)</span><span className="sm:hidden">Wage Register</span></>}
@@ -518,7 +557,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
                         max={maxDays}
                         step="1"
                         className={`figure ml-auto h-8 w-20 text-right ${overMax ? "border-danger text-danger" : ""}`}
-                        value={row.actualPresentDays}
+                        value={row.actualPresentDays === 0 ? "" : row.actualPresentDays}
                         disabled={isFinalized}
                         onChange={(e) => updateRow(row.workerId, { actualPresentDays: Number(e.target.value) })}
                       />
@@ -554,7 +593,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
                         key={c.key}
                         className={`figure text-right ${c.emphasis ? "font-medium" : ""} ${c.danger ? "text-danger" : ""} ${c.positive ? "font-semibold text-positive" : ""}`}
                       >
-                        {formatCurrencyPrecise(result[c.key])}
+                        {formatCurrency(result[c.key])}
                       </TableCell>
                     ))}
                   </TableRow>
@@ -563,23 +602,27 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
             </TableBody>
             <TableFooter>
               <TableRow>
-                <TableCell colSpan={2 + 2 + EDITABLE_COLUMNS.length}>Totals (all {computed.length} worker{computed.length === 1 ? "" : "s"})</TableCell>
-                <TableCell className="figure text-right">{formatCurrencyPrecise(totals.basicEarn)}</TableCell>
-                <TableCell className="figure text-right">{formatCurrencyPrecise(totals.hraEarn)}</TableCell>
-                <TableCell className="figure text-right">{formatCurrencyPrecise(totals.taEarn)}</TableCell>
-                <TableCell className="figure text-right">{formatCurrencyPrecise(totals.medicalEarn)}</TableCell>
-                <TableCell className="figure text-right">{formatCurrencyPrecise(totals.ceaEarn)}</TableCell>
-                <TableCell className="figure text-right">{formatCurrencyPrecise(totals.miscEarn)}</TableCell>
-                <TableCell className="figure text-right">{formatCurrencyPrecise(totals.otAmount)}</TableCell>
-                <TableCell className="figure text-right">{formatCurrencyPrecise(totals.incentive)}</TableCell>
-                <TableCell className="figure text-right font-medium">{formatCurrencyPrecise(totals.grossEarning)}</TableCell>
-                <TableCell className="figure text-right">{formatCurrencyPrecise(deductionTotals.pf)}</TableCell>
-                <TableCell className="figure text-right">{formatCurrencyPrecise(deductionTotals.esic)}</TableCell>
-                <TableCell className="figure text-right">{formatCurrencyPrecise(deductionTotals.employerEsic)}</TableCell>
-                <TableCell className="figure text-right">{formatCurrencyPrecise(deductionTotals.otEsic)}</TableCell>
-                <TableCell className="figure text-right">{formatCurrencyPrecise(deductionTotals.lwf)}</TableCell>
-                <TableCell className="figure text-right text-danger">{formatCurrencyPrecise(totals.totalDeduction)}</TableCell>
-                <TableCell className="figure text-right font-semibold text-positive">{formatCurrencyPrecise(totals.netPayable)}</TableCell>
+                <TableCell colSpan={2}>Totals (all {computed.length} worker{computed.length === 1 ? "" : "s"})</TableCell>
+                <TableCell className="figure text-right">{formatNumber(attendanceTotals.presentDays)}</TableCell>
+                <TableCell className="figure text-right">{formatNumber(attendanceTotals.weekOffHoliday)}</TableCell>
+                <TableCell className="figure text-right">{formatNumber(attendanceTotals.otHours)}</TableCell>
+                <TableCell colSpan={EDITABLE_COLUMNS.length - 1} />
+                <TableCell className="figure text-right">{formatCurrency(totals.basicEarn)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrency(totals.hraEarn)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrency(totals.taEarn)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrency(totals.medicalEarn)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrency(totals.ceaEarn)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrency(totals.miscEarn)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrency(totals.otAmount)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrency(totals.incentive)}</TableCell>
+                <TableCell className="figure text-right font-medium">{formatCurrency(totals.grossEarning)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrency(deductionTotals.pf)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrency(deductionTotals.esic)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrency(deductionTotals.employerEsic)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrency(deductionTotals.otEsic)}</TableCell>
+                <TableCell className="figure text-right">{formatCurrency(deductionTotals.lwf)}</TableCell>
+                <TableCell className="figure text-right text-danger">{formatCurrency(totals.totalDeduction)}</TableCell>
+                <TableCell className="figure text-right font-semibold text-positive">{formatCurrency(totals.netPayable)}</TableCell>
               </TableRow>
             </TableFooter>
           </Table>

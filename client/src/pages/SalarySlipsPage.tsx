@@ -12,7 +12,7 @@ import { calculateInHouseWageLine, calculateWageLine } from "@/lib/calc";
 import { downloadSalarySlip, downloadSalarySlipsBatch, type SalarySlipExportData } from "@/lib/exportExcel";
 import { downloadSalarySlipPdf, downloadSalarySlipsPdfBatch, downloadSalarySlipsPdfCompact } from "@/services/salarySlips";
 import { daysInMonth, monthLabel } from "@/lib/date";
-import { formatCurrencyPrecise } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -457,7 +457,7 @@ export function SalarySlipsPage() {
                     <TableCell className="figure">{slip.employeeCode}</TableCell>
                     <TableCell>{slip.employeeName}</TableCell>
                     <TableCell>{slip.department}</TableCell>
-                    <TableCell className="figure text-right font-medium">{formatCurrencyPrecise(slip.netPayable)}</TableCell>
+                    <TableCell className="figure text-right font-medium">{formatCurrency(slip.netPayable)}</TableCell>
                     <TableCell className="flex justify-end gap-1 text-right">
                       <Button variant="ghost" size="sm" onClick={() => setPreview(slip)}>
                         <FileText className="size-4" />

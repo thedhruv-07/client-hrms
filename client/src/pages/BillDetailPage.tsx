@@ -8,7 +8,7 @@ import { downloadBill } from "@/lib/exportExcel";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { formatCurrencyPrecise } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 import { monthLabel, monthLabelShort } from "@/lib/date";
 import { toast } from "@/hooks/use-toast";
 import type { BillLine } from "@/types";
@@ -120,7 +120,7 @@ export function BillDetailPage() {
 }
 
 function BillLines({ line }: { line: BillLine }) {
-  const amt = (v: string) => formatCurrencyPrecise(Number(v));
+  const amt = (v: string) => formatCurrency(Number(v));
   return (
     <div className="flex flex-col">
       <LineRow label="Basic" value={amt(line.basicWages)} />

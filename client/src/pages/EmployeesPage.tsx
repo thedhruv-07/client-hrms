@@ -15,7 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { InHouseEmployeeForm, inHouseEmployeeToDefaults } from "@/components/in-house-employee-form";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { toast } from "@/hooks/use-toast";
-import { formatCurrencyPrecise } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 
 export function EmployeesPage() {
   const queryClient = useQueryClient();
@@ -66,7 +66,7 @@ export function EmployeesPage() {
       {
         accessorKey: "basicSalary",
         header: () => <div className="text-right">Basic Salary</div>,
-        cell: (info) => <div className="figure text-right">{formatCurrencyPrecise(Number(info.getValue<string>()))}</div>,
+        cell: (info) => <div className="figure text-right">{formatCurrency(Number(info.getValue<string>()))}</div>,
       },
       {
         accessorKey: "status",
@@ -227,7 +227,7 @@ export function EmployeesPage() {
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted">Basic Salary</dt>
-                    <dd className="figure">{formatCurrencyPrecise(Number(selected.basicSalary))}</dd>
+                    <dd className="figure">{formatCurrency(Number(selected.basicSalary))}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-muted">Joining Date</dt>

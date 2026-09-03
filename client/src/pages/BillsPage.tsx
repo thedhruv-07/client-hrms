@@ -9,7 +9,7 @@ import { StampBadge } from "@/components/ui/stamp-badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { formatCurrencyPrecise } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 import { monthLabel } from "@/lib/date";
 import { usePeriod } from "@/hooks/usePeriod";
 import { toast } from "@/hooks/use-toast";
@@ -130,7 +130,7 @@ export function BillsPage() {
                     <TableCell>{bill.client.name}</TableCell>
                     <TableCell className="figure">{monthLabel(bill.month, bill.year)}</TableCell>
                     <TableCell className="figure">{new Date(bill.billDate).toLocaleDateString("en-IN")}</TableCell>
-                    <TableCell className="figure text-right font-medium">{bill.line ? formatCurrencyPrecise(Number(bill.line.grandTotal)) : "—"}</TableCell>
+                    <TableCell className="figure text-right font-medium">{bill.line ? formatCurrency(Number(bill.line.grandTotal)) : "—"}</TableCell>
                     <TableCell>
                       <StampBadge tone="seal">Generated</StampBadge>
                     </TableCell>

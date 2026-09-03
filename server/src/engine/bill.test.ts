@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { calculateBill } from "./bill";
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+function round0(n: number): number {
+  return Math.round(n);
 }
 
 // End-to-end reproduction of the real "BILL CALCULATION" sheet in
@@ -20,20 +20,17 @@ test("bill reproduces the real BILL CALCULATION sheet's Sub Total through Grand 
     lwf: 306, // 2x the wage register's own Welfare-employee total of 153
   });
 
-  assert.equal(bill.total1, round2(152953.9375)); // Sub Total
-  assert.equal(bill.esiEmployer, 4972); // ROUNDUP(152953.94*3.25%, 0)
-  assert.equal(bill.pfEmployer, round2(70823.38333333333 * 0.13)); // 13% of pfBase (uncapped this month)
-  assert.equal(bill.serviceCharge, round2(152953.9375 * 0.05));
+  // basicWages/hra round to whole rupees first (70823, 2140), so total1 sums
+  // those rounded parts rather than the raw fractional inputs.
+  assert.equal(bill.total1, 152953); // Sub Total
+  assert.equal(bill.esiEmployer, Math.ceil(152953 * 0.0325)); // ROUNDUP(total1*3.25%, 0)
+  assert.equal(bill.pfEmployer, round0(70823 * 0.13)); // 13% of pfBase (uncapped this month)
+  assert.equal(bill.serviceCharge, round0(152953 * 0.05));
   assert.equal(bill.lwf, 306);
-  // total2/grandTotal land a paisa above Excel's arbitrary-precision sum
-  // (175086.674.../206602.275...) because each line here is stored/rounded
-  // to 2 decimals before summing, unlike Excel's unrounded intermediate
-  // cells — the same display-vs-underlying-value quirk noted throughout
-  // this codebase's wage/bill engines.
-  assert.equal(bill.total2, 175086.68); // Taxable Amount
-  assert.equal(bill.cgst, round2(15757.80067875));
-  assert.equal(bill.sgst, round2(15757.80067875));
-  assert.equal(bill.grandTotal, 206602.28);
+  assert.equal(bill.total2, 175085); // Taxable Amount
+  assert.equal(bill.cgst, round0(175085 * 0.09));
+  assert.equal(bill.sgst, round0(175085 * 0.09));
+  assert.equal(bill.grandTotal, 206601);
 });
 
 test("PF reimbursement is capped at the EPF wage ceiling per worker, not the raw basic total", () => {

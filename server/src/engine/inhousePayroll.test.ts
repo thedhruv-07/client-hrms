@@ -17,10 +17,10 @@ test("below ESIC threshold with unpaid leave and a bonus", () => {
   assert.equal(r.leaveDeduction, 1000); // (15000/30) * 2
   assert.equal(r.grossEarning, 15000); // 15000 - 1000 + 1000
   assert.equal(r.pf, 1800); // 15000 * 12%, on basic not gross
-  assert.equal(r.esic, 112.5); // gross <= 21000
+  assert.equal(r.esic, 113); // gross <= 21000; 112.5 rounds to the nearest rupee
   assert.equal(r.lwf, 30);
-  assert.equal(r.totalDeduction, 1942.5);
-  assert.equal(r.netPayable, 13057.5);
+  assert.equal(r.totalDeduction, 1943); // 1942.5 rounds to the nearest rupee
+  assert.equal(r.netPayable, 13058); // 13057.5 rounds to the nearest rupee
 });
 
 test("advance is subtracted from net but not from totalDeduction", () => {
@@ -32,13 +32,13 @@ test("advance is subtracted from net but not from totalDeduction", () => {
 test("gross exactly at the ESIC threshold (21000) still gets ESIC — condition is <=, not <", () => {
   const r = calculateInHouseWageLine({ basicSalary: 21000 });
   assert.equal(r.grossEarning, 21000);
-  assert.equal(r.esic, 157.5); // 21000 * 0.75%
+  assert.equal(r.esic, 158); // 21000 * 0.75% = 157.5, rounds to the nearest rupee
 });
 
 test("one paisa above the ESIC threshold gets no ESIC", () => {
   const r = calculateInHouseWageLine({ basicSalary: 21000, bonus: 0.01 });
-  assert.equal(r.grossEarning, 21000.01);
-  assert.equal(r.esic, 0);
+  assert.equal(r.grossEarning, 21000); // 21000.01 rounds to the nearest rupee for display...
+  assert.equal(r.esic, 0); // ...but the raw (pre-rounding) gross is still used for the threshold check
 });
 
 test("zero basic salary and no other inputs nets to zero", () => {
@@ -56,6 +56,6 @@ test("register totals recompute at full precision before rounding", () => {
     { basicSalary: 15000, unpaidLeaveDays: 2, bonus: 1000 },
   ]);
   assert.equal(totals.grossEarning, 45000);
-  assert.equal(totals.totalDeduction, 3660 + 1942.5);
-  assert.equal(totals.netPayable, 26340 + 13057.5);
+  assert.equal(totals.totalDeduction, 5603); // 3660 + 1942.5 = 5602.5, rounds to the nearest rupee
+  assert.equal(totals.netPayable, 39398); // 26340 + 13057.5 = 39397.5, rounds to the nearest rupee
 });
