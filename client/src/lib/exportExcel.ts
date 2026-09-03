@@ -1069,6 +1069,59 @@ export async function downloadNeftSheet(rows: NeftPaymentRow[], filename: string
   await downloadWorkbook(wb, filename);
 }
 
+export interface BankSheetRow {
+  code: string;
+  name: string;
+  bankAccount: string;
+  ifsc: string;
+  netPayable: number;
+}
+
+/**
+ * Human-readable bank-details sheet for internal review/record-keeping — company letterhead
+ * above a plain worker/account/net-payable table. Not the bank's bulk-upload format (that's
+ * `downloadNeftSheet`, whose exact column layout must stay untouched for the bank portal).
+ */
+export async function downloadBankSheet(params: { companyName: string; companyAddress: string; monthLabel: string; rows: BankSheetRow[]; filename: string }): Promise<void> {
+  const wb = new ExcelJS.Workbook();
+  const sheet = wb.addWorksheet("Bank Sheet");
+  sheet.columns = [{ width: 12 }, { width: 24 }, { width: 22 }, { width: 16 }, { width: 16 }];
+
+  const nameRow = sheet.addRow([params.companyName]);
+  sheet.mergeCells(nameRow.number, 1, nameRow.number, 5);
+  nameRow.height = 24;
+  nameRow.getCell(1).font = { bold: true, size: 16 };
+  nameRow.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+
+  const addressRow = sheet.addRow([params.companyAddress]);
+  sheet.mergeCells(addressRow.number, 1, addressRow.number, 5);
+  addressRow.getCell(1).font = { size: 10, color: MUTED_GREY };
+  addressRow.getCell(1).alignment = { horizontal: "center", wrapText: true };
+
+  const titleRow = sheet.addRow([`BANK PAYMENT SHEET FOR THE MONTH OF ${params.monthLabel.toUpperCase()}`]);
+  sheet.mergeCells(titleRow.number, 1, titleRow.number, 5);
+  titleRow.getCell(1).font = { bold: true, size: 12 };
+  titleRow.getCell(1).alignment = { horizontal: "center" };
+
+  sheet.addRow([]);
+
+  const header = sheet.addRow(["S.No", "Name", "Bank Account", "IFSC", "Net Payable"]);
+  styleHeaderRow(header);
+  header.getCell(1).alignment = { horizontal: "center" };
+
+  params.rows.forEach((r, i) => {
+    const row = sheet.addRow([i + 1, `${r.name} (${r.code})`, r.bankAccount, r.ifsc, r.netPayable]);
+    row.getCell(1).alignment = { horizontal: "center" };
+  });
+
+  const totalRow = sheet.addRow(["", "", "", "Total", params.rows.reduce((sum, r) => sum + r.netPayable, 0)]);
+  totalRow.font = { bold: true };
+  totalRow.getCell(4).alignment = { horizontal: "right" };
+
+  applyMoneyFormat(sheet, ["E"], 5);
+  await downloadWorkbook(wb, params.filename);
+}
+
 export interface WorkerDetailsSheetRow {
   code: string;
   name: string;

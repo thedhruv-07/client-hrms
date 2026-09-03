@@ -6,7 +6,7 @@ import { getCompany } from "@/services/company";
 import { listClients } from "@/services/clients";
 import { listBills } from "@/services/bills";
 import { calculateWageLine, sumWageLines, calculateBill, type WageResult } from "@/lib/calc";
-import { downloadWageRegisterWithBill, downloadBill, downloadNeftSheet, type BillExportData } from "@/lib/exportExcel";
+import { downloadWageRegisterWithBill, downloadBill, downloadNeftSheet, downloadBankSheet, type BillExportData } from "@/lib/exportExcel";
 import { daysInMonth, monthLabel, monthLabelShort } from "@/lib/date";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableFooter } from "@/components/ui/table";
@@ -127,6 +127,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
   const [saving, setSaving] = useState(false);
   const [neftGenerating, setNeftGenerating] = useState(false);
   const [billGenerating, setBillGenerating] = useState(false);
+  const [bankSheetGenerating, setBankSheetGenerating] = useState(false);
   const [page, setPage] = useState(0);
 
   useEffect(() => {
@@ -421,6 +422,31 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
     }
   }
 
+  async function onDownloadBankSheet() {
+    setBankSheetGenerating(true);
+    try {
+      const payable = computed.filter((c) => c.row.bankAccount && c.row.ifsc);
+      const skipped = computed.length - payable.length;
+      if (payable.length === 0) throw new Error("No workers have both a bank account and IFSC on file.");
+      const company = await getCompany();
+      await downloadBankSheet({
+        companyName: company.name,
+        companyAddress: company.address,
+        monthLabel: monthLabel(month, year),
+        rows: payable.map(({ row, result }) => ({ code: row.code, name: row.name, bankAccount: row.bankAccount!, ifsc: row.ifsc!, netPayable: result.netPayable })),
+        filename: `bank-sheet-${clientId ? (clients.find((c) => c.id === clientId)?.name ?? "client").toLowerCase().replace(/\s+/g, "-") : "workers"}-${monthLabel(month, year).toLowerCase()}.xlsx`,
+      });
+      toast({
+        title: `Bank sheet downloaded — ${payable.length} worker(s)`,
+        description: skipped > 0 ? `${skipped} worker(s) skipped — missing bank account or IFSC.` : undefined,
+      });
+    } catch (err) {
+      toast({ title: "Could not generate the bank sheet", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setBankSheetGenerating(false);
+    }
+  }
+
   async function onSave() {
     if (!rows) return;
     setSaving(true);
@@ -500,6 +526,10 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
           <Button variant="outline" onClick={onDownloadNeft} disabled={neftGenerating || isLoading}>
             <Download className="size-4" />
             {neftGenerating ? "Preparing…" : <><span className="hidden sm:inline">Download Bank NEFT Sheet (.xlsx)</span><span className="sm:hidden">NEFT Sheet</span></>}
+          </Button>
+          <Button variant="outline" onClick={onDownloadBankSheet} disabled={bankSheetGenerating || isLoading}>
+            <Download className="size-4" />
+            {bankSheetGenerating ? "Preparing…" : <><span className="hidden sm:inline">Download Bank Sheet (.xlsx)</span><span className="sm:hidden">Bank Sheet</span></>}
           </Button>
           <Button variant="outline" onClick={onDownloadBill} disabled={billGenerating || isLoading}>
             <Download className="size-4" />
