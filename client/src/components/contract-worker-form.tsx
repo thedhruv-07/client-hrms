@@ -98,27 +98,49 @@ export function ContractWorkerForm({ defaultValues, existingCodes, currentCode, 
         </div>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="clientId">Client</Label>
-        <Controller
-          name="clientId"
-          control={control}
-          render={({ field }) => (
-            <Select value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger id="clientId">
-                <SelectValue placeholder="Select a client" />
-              </SelectTrigger>
-              <SelectContent>
-                {clients.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        />
-        {errors.clientId ? <p className="text-xs text-danger">{errors.clientId.message}</p> : null}
+      <div className={currentCode ? "grid grid-cols-2 gap-4" : ""}>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="clientId">Client</Label>
+          <Controller
+            name="clientId"
+            control={control}
+            render={({ field }) => (
+              <Select value={field.value} onValueChange={field.onChange}>
+                <SelectTrigger id="clientId">
+                  <SelectValue placeholder="Select a client" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
+          {errors.clientId ? <p className="text-xs text-danger">{errors.clientId.message}</p> : null}
+        </div>
+        {currentCode ? (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="status">Status</Label>
+            <Controller
+              name="status"
+              control={control}
+              render={({ field }) => (
+                <Select value={field.value ?? "ACTIVE"} onValueChange={field.onChange}>
+                  <SelectTrigger id="status">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ACTIVE">Active</SelectItem>
+                    <SelectItem value="INACTIVE">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -207,5 +229,6 @@ export function contractWorkerToDefaults(worker: ContractWorker): ContractWorker
     aadharNo: worker.aadharNo ?? "",
     address: worker.address ?? "",
     bankName: worker.bankName ?? "",
+    status: worker.status,
   };
 }
