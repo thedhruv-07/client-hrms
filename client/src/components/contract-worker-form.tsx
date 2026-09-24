@@ -22,6 +22,7 @@ export function ContractWorkerForm({ defaultValues, existingCodes, currentCode, 
     register,
     handleSubmit,
     control,
+    watch,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<ContractWorkerFormValues>({
@@ -141,6 +142,12 @@ export function ContractWorkerForm({ defaultValues, existingCodes, currentCode, 
             />
           </div>
         ) : null}
+        {currentCode && watch("status") === "INACTIVE" ? (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="inactiveFrom">Inactive from</Label>
+            <Input id="inactiveFrom" type="date" {...register("inactiveFrom")} />
+          </div>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -230,5 +237,6 @@ export function contractWorkerToDefaults(worker: ContractWorker): ContractWorker
     address: worker.address ?? "",
     bankName: worker.bankName ?? "",
     status: worker.status,
+    inactiveFrom: worker.inactiveFrom ? worker.inactiveFrom.slice(0, 10) : "",
   };
 }

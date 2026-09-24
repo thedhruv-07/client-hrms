@@ -26,6 +26,7 @@ export const contractWorkerSchema = z.object({
   address: z.string().optional(),
   bankName: z.string().optional(),
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+  inactiveFrom: z.string().optional(),
 });
 
 export type ContractWorkerFormValues = z.infer<typeof contractWorkerSchema>;

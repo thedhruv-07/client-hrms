@@ -84,6 +84,8 @@ export interface ContractWorker {
   address: string | null;
   bankName: string | null;
   status: WorkerStatus;
+  /** When the worker went inactive; null while ACTIVE. */
+  inactiveFrom: string | null;
   createdAt: string;
   updatedAt: string;
 }

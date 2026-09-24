@@ -17,6 +17,7 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from "
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { ContractWorkerForm, contractWorkerToDefaults } from "@/components/contract-worker-form";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { usePeriod } from "@/hooks/usePeriod";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/format";
 import { monthLabel } from "@/lib/date";
@@ -25,6 +26,7 @@ import { downloadWorkerDetailsSheet } from "@/lib/exportExcel";
 
 export function WorkersPage() {
   const queryClient = useQueryClient();
+  const { period } = usePeriod();
   const [search, setSearch] = useState("");
   const [clientFilter, setClientFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -58,10 +60,16 @@ export function WorkersPage() {
   const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: listClients });
 
   const joinMonths = useMemo(() => [...new Set((allWorkers ?? []).flatMap((w) => (w.doj ? [w.doj.slice(0, 7)] : [])))].sort(), [allWorkers]);
-  const workers = useMemo(
-    () => (joinMonthFilter === "all" ? allWorkers : allWorkers?.filter((w) => w.doj?.startsWith(joinMonthFilter))),
-    [allWorkers, joinMonthFilter]
-  );
+  // Month roster: joined on/before the selected month, and not gone inactive in an earlier month.
+  const workers = useMemo(() => {
+    const ym = `${period.year}-${String(period.month).padStart(2, "0")}`;
+    return allWorkers?.filter(
+      (w) =>
+        (!w.doj || w.doj.slice(0, 7) <= ym) &&
+        (!w.inactiveFrom || w.inactiveFrom.slice(0, 7) >= ym) &&
+        (joinMonthFilter === "all" || w.doj?.startsWith(joinMonthFilter))
+    );
+  }, [allWorkers, period, joinMonthFilter]);
 
   function invalidate() {
     return queryClient.invalidateQueries({ queryKey: ["contract-workers"] });

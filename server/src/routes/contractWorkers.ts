@@ -40,6 +40,7 @@ export const createSchema = z.object({
 
 export const updateSchema = createSchema.partial().extend({
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+  inactiveFrom: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.date().optional()),
 });
 
 const importSchema = z.object({ csv: z.string().min(1) });
@@ -420,9 +421,16 @@ contractWorkersRouter.put("/:id", requireRole("ADMIN", "HR"), async (req, res) =
     return;
   }
   try {
+    const data: Prisma.ContractWorkerUpdateInput = { ...parsed.data };
+    if (parsed.data.status === "ACTIVE") {
+      data.inactiveFrom = null;
+    } else if (parsed.data.status === "INACTIVE" && !parsed.data.inactiveFrom) {
+      const current = await prisma.contractWorker.findUnique({ where: { id: idParam(req) }, select: { status: true, inactiveFrom: true } });
+      data.inactiveFrom = current?.status === "INACTIVE" && current.inactiveFrom ? current.inactiveFrom : new Date();
+    }
     const worker = await prisma.contractWorker.update({
       where: { id: idParam(req) },
-      data: parsed.data,
+      data,
     });
     await logAudit({ userId: req.user!.id, action: "UPDATE", entityType: "ContractWorker", entityId: worker.id, changes: parsed.data });
     res.json(worker);
@@ -464,7 +472,7 @@ contractWorkersRouter.delete("/:id", requireRole("ADMIN"), async (req, res) => {
   try {
     const worker = await prisma.contractWorker.update({
       where: { id: idParam(req) },
-      data: { status: "INACTIVE" },
+      data: { status: "INACTIVE", inactiveFrom: new Date() },
     });
     await logAudit({ userId: req.user!.id, action: "DELETE", entityType: "ContractWorker", entityId: worker.id });
     res.json(worker);
