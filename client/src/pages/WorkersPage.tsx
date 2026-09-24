@@ -19,6 +19,7 @@ import { ContractWorkerForm, contractWorkerToDefaults } from "@/components/contr
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/format";
+import { monthLabel } from "@/lib/date";
 import { parseWorkerWorkbook } from "@/lib/workerImport";
 import { downloadWorkerDetailsSheet } from "@/lib/exportExcel";
 
@@ -27,6 +28,7 @@ export function WorkersPage() {
   const [search, setSearch] = useState("");
   const [clientFilter, setClientFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [joinMonthFilter, setJoinMonthFilter] = useState<string>("all");
   const [sorting, setSorting] = useState<SortingState>([{ id: "code", desc: false }]);
   const [addOpen, setAddOpen] = useState(false);
   const [selected, setSelected] = useState<ContractWorker | null>(null);
@@ -43,7 +45,7 @@ export function WorkersPage() {
     onNew: () => setAddOpen(true),
   });
 
-  const { data: workers, isLoading } = useQuery({
+  const { data: allWorkers, isLoading } = useQuery({
     queryKey: ["contract-workers", search, clientFilter, statusFilter],
     queryFn: () =>
       listContractWorkers(
@@ -55,11 +57,17 @@ export function WorkersPage() {
 
   const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: listClients });
 
+  const joinMonths = useMemo(() => [...new Set((allWorkers ?? []).flatMap((w) => (w.doj ? [w.doj.slice(0, 7)] : [])))].sort(), [allWorkers]);
+  const workers = useMemo(
+    () => (joinMonthFilter === "all" ? allWorkers : allWorkers?.filter((w) => w.doj?.startsWith(joinMonthFilter))),
+    [allWorkers, joinMonthFilter]
+  );
+
   function invalidate() {
     return queryClient.invalidateQueries({ queryKey: ["contract-workers"] });
   }
 
-  const existingCodes = useMemo(() => (workers ?? []).map((w) => w.code), [workers]);
+  const existingCodes = useMemo(() => (allWorkers ?? []).map((w) => w.code), [allWorkers]);
   const clientName = useCallback((id: string) => clients?.find((c) => c.id === id)?.name ?? "—", [clients]);
 
   async function handleImportFile(file: File) {
@@ -223,6 +231,19 @@ export function WorkersPage() {
             <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="ACTIVE">Active</SelectItem>
             <SelectItem value="INACTIVE">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={joinMonthFilter} onValueChange={setJoinMonthFilter}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Joining Month" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Joining Months</SelectItem>
+            {joinMonths.map((ym) => (
+              <SelectItem key={ym} value={ym}>
+                {monthLabel(Number(ym.slice(5)), Number(ym.slice(0, 4)))}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Button variant="outline" onClick={handleExportDetails} disabled={exporting || isLoading || (workers ?? []).length === 0}>
