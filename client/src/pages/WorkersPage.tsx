@@ -17,7 +17,6 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from "
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { ContractWorkerForm, contractWorkerToDefaults } from "@/components/contract-worker-form";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
-import { usePeriod } from "@/hooks/usePeriod";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/format";
 import { parseWorkerWorkbook } from "@/lib/workerImport";
@@ -25,7 +24,6 @@ import { downloadWorkerDetailsSheet } from "@/lib/exportExcel";
 
 export function WorkersPage() {
   const queryClient = useQueryClient();
-  const { period } = usePeriod();
   const [search, setSearch] = useState("");
   const [clientFilter, setClientFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -45,7 +43,7 @@ export function WorkersPage() {
     onNew: () => setAddOpen(true),
   });
 
-  const { data: allWorkers, isLoading } = useQuery({
+  const { data: workers, isLoading } = useQuery({
     queryKey: ["contract-workers", search, clientFilter, statusFilter],
     queryFn: () =>
       listContractWorkers(
@@ -57,16 +55,11 @@ export function WorkersPage() {
 
   const { data: clients } = useQuery({ queryKey: ["clients"], queryFn: listClients });
 
-  const workers = useMemo(() => {
-    const prefix = `${period.year}-${String(period.month).padStart(2, "0")}`;
-    return allWorkers?.filter((w) => w.doj?.startsWith(prefix));
-  }, [allWorkers, period]);
-
   function invalidate() {
     return queryClient.invalidateQueries({ queryKey: ["contract-workers"] });
   }
 
-  const existingCodes = useMemo(() => (allWorkers ?? []).map((w) => w.code), [allWorkers]);
+  const existingCodes = useMemo(() => (workers ?? []).map((w) => w.code), [workers]);
   const clientName = useCallback((id: string) => clients?.find((c) => c.id === id)?.name ?? "—", [clients]);
 
   async function handleImportFile(file: File) {
