@@ -141,12 +141,13 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
     if (runQuery.data && !linesQuery.data) return; // wait for lines if a run exists
 
     // Month roster: joined on/before this month, and not gone inactive in an earlier month.
-    // Workers already saved in this run always stay, so re-saving never drops history.
+    // Workers who left earlier but are already saved in this run stay, so re-saving never drops paid history;
+    // workers who joined after this month never belong in it, saved or not.
     // ponytail: INACTIVE with no inactiveFrom is treated as gone for every month — set the date in Workers to place them.
     const ym = `${year}-${String(month).padStart(2, "0")}`;
     const roster = workersQuery.data.filter((w) => {
-      if (linesQuery.data?.some((l) => l.contractWorkerId === w.id)) return true;
       if (w.doj && w.doj.slice(0, 7) > ym) return false;
+      if (linesQuery.data?.some((l) => l.contractWorkerId === w.id)) return true;
       if (w.inactiveFrom) return w.inactiveFrom.slice(0, 7) >= ym;
       return w.status === "ACTIVE";
     });
