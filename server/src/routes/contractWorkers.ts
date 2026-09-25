@@ -41,6 +41,7 @@ export const createSchema = z.object({
 export const updateSchema = createSchema.partial().extend({
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
   inactiveFrom: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.date().optional()),
+  rejoinedOn: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.date().optional()),
 });
 
 const importSchema = z.object({ csv: z.string().min(1) });
@@ -422,11 +423,14 @@ contractWorkersRouter.put("/:id", requireRole("ADMIN", "HR"), async (req, res) =
   }
   try {
     const data: Prisma.ContractWorkerUpdateInput = { ...parsed.data };
-    if (parsed.data.status === "ACTIVE") {
-      data.inactiveFrom = null;
-    } else if (parsed.data.status === "INACTIVE" && !parsed.data.inactiveFrom) {
+    if (parsed.data.status) {
       const current = await prisma.contractWorker.findUnique({ where: { id: idParam(req) }, select: { status: true, inactiveFrom: true } });
-      data.inactiveFrom = current?.status === "INACTIVE" && current.inactiveFrom ? current.inactiveFrom : new Date();
+      if (parsed.data.status === "INACTIVE") {
+        data.rejoinedOn = null;
+        if (!parsed.data.inactiveFrom) data.inactiveFrom = current?.status === "INACTIVE" && current.inactiveFrom ? current.inactiveFrom : new Date();
+      } else if (current?.status === "INACTIVE" && !parsed.data.rejoinedOn) {
+        data.rejoinedOn = new Date();
+      }
     }
     const worker = await prisma.contractWorker.update({
       where: { id: idParam(req) },
@@ -472,7 +476,7 @@ contractWorkersRouter.delete("/:id", requireRole("ADMIN"), async (req, res) => {
   try {
     const worker = await prisma.contractWorker.update({
       where: { id: idParam(req) },
-      data: { status: "INACTIVE", inactiveFrom: new Date() },
+      data: { status: "INACTIVE", inactiveFrom: new Date(), rejoinedOn: null },
     });
     await logAudit({ userId: req.user!.id, action: "DELETE", entityType: "ContractWorker", entityId: worker.id });
     res.json(worker);

@@ -18,6 +18,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ContractWorkerForm, contractWorkerToDefaults } from "@/components/contract-worker-form";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { usePeriod } from "@/hooks/usePeriod";
+import { onRoster } from "@/lib/roster";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/format";
 import { monthLabel } from "@/lib/date";
@@ -64,10 +65,7 @@ export function WorkersPage() {
   const workers = useMemo(() => {
     const ym = `${period.year}-${String(period.month).padStart(2, "0")}`;
     return allWorkers?.filter(
-      (w) =>
-        (!w.doj || w.doj.slice(0, 7) <= ym) &&
-        (!w.inactiveFrom || w.inactiveFrom.slice(0, 7) >= ym) &&
-        (joinMonthFilter === "all" || w.doj?.startsWith(joinMonthFilter))
+      (w) => onRoster(w, ym) && (joinMonthFilter === "all" || w.doj?.startsWith(joinMonthFilter))
     );
   }, [allWorkers, period, joinMonthFilter]);
 

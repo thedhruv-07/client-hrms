@@ -114,6 +114,8 @@ model ContractWorker {
   status            WorkerStatus @default(ACTIVE)
   /// When the worker went inactive — drives the month-wise roster: shown up to and including this month, hidden after. Null while ACTIVE.
   inactiveFrom      DateTime?
+  /// When the worker came back after leaving — with inactiveFrom, the months in between are skipped in the roster. Null if never rejoined.
+  rejoinedOn        DateTime?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 

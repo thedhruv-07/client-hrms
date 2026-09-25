@@ -148,6 +148,12 @@ export function ContractWorkerForm({ defaultValues, existingCodes, currentCode, 
             <Input id="inactiveFrom" type="date" {...register("inactiveFrom")} />
           </div>
         ) : null}
+        {currentCode && watch("status") === "ACTIVE" && watch("inactiveFrom") ? (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="rejoinedOn">Rejoin date</Label>
+            <Input id="rejoinedOn" type="date" {...register("rejoinedOn")} />
+          </div>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -238,5 +244,6 @@ export function contractWorkerToDefaults(worker: ContractWorker): ContractWorker
     bankName: worker.bankName ?? "",
     status: worker.status,
     inactiveFrom: worker.inactiveFrom ? worker.inactiveFrom.slice(0, 10) : "",
+    rejoinedOn: worker.rejoinedOn ? worker.rejoinedOn.slice(0, 10) : "",
   };
 }

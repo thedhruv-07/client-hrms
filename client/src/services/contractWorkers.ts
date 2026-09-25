@@ -26,6 +26,7 @@ export interface ContractWorkerInput {
   address?: string;
   bankName?: string;
   inactiveFrom?: string;
+  rejoinedOn?: string;
 }
 
 export interface ImportResult {

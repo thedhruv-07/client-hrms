@@ -17,6 +17,7 @@ import { StampBadge } from "@/components/ui/stamp-badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Download, Save, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { onRoster } from "@/lib/roster";
 
 interface Row {
   workerId: string;
@@ -148,8 +149,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
     const roster = workersQuery.data.filter((w) => {
       if (w.doj && w.doj.slice(0, 7) > ym) return false;
       if (linesQuery.data?.some((l) => l.contractWorkerId === w.id)) return true;
-      if (w.inactiveFrom) return w.inactiveFrom.slice(0, 7) >= ym;
-      return w.status === "ACTIVE";
+      return w.inactiveFrom ? onRoster(w, ym) : w.status === "ACTIVE";
     });
     setRows(
       roster.map((w) => {

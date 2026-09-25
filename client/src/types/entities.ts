@@ -86,6 +86,8 @@ export interface ContractWorker {
   status: WorkerStatus;
   /** When the worker went inactive; null while ACTIVE. */
   inactiveFrom: string | null;
+  /** When the worker came back after leaving; null if never rejoined. */
+  rejoinedOn: string | null;
   createdAt: string;
   updatedAt: string;
 }
