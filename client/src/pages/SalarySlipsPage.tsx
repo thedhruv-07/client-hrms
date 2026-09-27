@@ -9,6 +9,7 @@ import { getCompany } from "@/services/company";
 import { usePeriod } from "@/hooks/usePeriod";
 import { useModule } from "@/hooks/useModule";
 import { calculateInHouseWageLine, calculateWageLine } from "@/lib/calc";
+import { onRoster } from "@/lib/roster";
 import { downloadSalarySlip, downloadSalarySlipsBatch, type SalarySlipExportData } from "@/lib/exportExcel";
 import { downloadSalarySlipPdf, downloadSalarySlipsPdfBatch, downloadSalarySlipsPdfCompact } from "@/services/salarySlips";
 import { daysInMonth, monthLabel } from "@/lib/date";
@@ -314,8 +315,16 @@ export function SalarySlipsPage() {
     runQuery.isLoading ||
     (!!runQuery.data && linesQuery.isLoading);
 
-  const activeEmployees = useMemo(() => (employeesQuery.data ?? []).filter((e) => e.status === "ACTIVE"), [employeesQuery.data]);
-  const activeWorkers = useMemo(() => (workersQuery.data ?? []).filter((w) => w.status === "ACTIVE"), [workersQuery.data]);
+  const activeEmployees = useMemo(() => {
+    const ym = `${period.year}-${String(period.month).padStart(2, "0")}`;
+    return (employeesQuery.data ?? []).filter((e) =>
+      e.inactiveFrom ? onRoster({ doj: e.joiningDate, inactiveFrom: e.inactiveFrom, rejoinedOn: e.rejoinedOn }, ym) : e.status === "ACTIVE"
+    );
+  }, [employeesQuery.data, period]);
+  const activeWorkers = useMemo(() => {
+    const ym = `${period.year}-${String(period.month).padStart(2, "0")}`;
+    return (workersQuery.data ?? []).filter((w) => (w.inactiveFrom ? onRoster(w, ym) : w.status === "ACTIVE"));
+  }, [workersQuery.data, period]);
   const clientName = clients.find((c) => c.id === clientId)?.name ?? "";
 
   const slips = useMemo(() => {

@@ -141,6 +141,10 @@ model InHouseEmployee {
   esicNo            String?
   uan               String?
   status            WorkerStatus @default(ACTIVE)
+  /// When the employee went inactive — drives the month-wise roster, same as ContractWorker.inactiveFrom.
+  inactiveFrom      DateTime?
+  /// When the employee came back after leaving; null if never rejoined.
+  rejoinedOn        DateTime?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 

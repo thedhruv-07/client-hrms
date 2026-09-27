@@ -17,6 +17,9 @@ export const inHouseEmployeeSchema = z.object({
   pfNo: z.string().optional(),
   esicNo: z.string().optional(),
   uan: z.string().optional(),
+  status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+  inactiveFrom: z.string().optional(),
+  rejoinedOn: z.string().optional(),
 });
 
 export type InHouseEmployeeFormValues = z.infer<typeof inHouseEmployeeSchema>;

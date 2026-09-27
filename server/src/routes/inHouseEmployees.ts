@@ -31,6 +31,8 @@ export const createSchema = z.object({
 
 export const updateSchema = createSchema.partial().extend({
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+  inactiveFrom: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.date().optional()),
+  rejoinedOn: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.date().optional()),
 });
 
 const importSchema = z.object({ csv: z.string().min(1) });
@@ -332,9 +334,19 @@ inHouseEmployeesRouter.put("/:id", requireRole("ADMIN", "HR"), async (req, res) 
     return;
   }
   try {
+    const data: Prisma.InHouseEmployeeUpdateInput = { ...parsed.data };
+    if (parsed.data.status) {
+      const current = await prisma.inHouseEmployee.findUnique({ where: { id: idParam(req) }, select: { status: true, inactiveFrom: true } });
+      if (parsed.data.status === "INACTIVE") {
+        data.rejoinedOn = null;
+        if (!parsed.data.inactiveFrom) data.inactiveFrom = current?.status === "INACTIVE" && current.inactiveFrom ? current.inactiveFrom : new Date();
+      } else if (current?.status === "INACTIVE" && !parsed.data.rejoinedOn) {
+        data.rejoinedOn = new Date();
+      }
+    }
     const employee = await prisma.inHouseEmployee.update({
       where: { id: idParam(req) },
-      data: parsed.data,
+      data,
     });
     await logAudit({ userId: req.user!.id, action: "UPDATE", entityType: "InHouseEmployee", entityId: employee.id, changes: parsed.data });
     res.json(employee);
@@ -372,7 +384,7 @@ inHouseEmployeesRouter.delete("/:id", requireRole("ADMIN"), async (req, res) => 
   try {
     const employee = await prisma.inHouseEmployee.update({
       where: { id: idParam(req) },
-      data: { status: "INACTIVE" },
+      data: { status: "INACTIVE", inactiveFrom: new Date(), rejoinedOn: null },
     });
     await logAudit({ userId: req.user!.id, action: "DELETE", entityType: "InHouseEmployee", entityId: employee.id });
     res.json(employee);

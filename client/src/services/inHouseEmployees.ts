@@ -17,6 +17,8 @@ export interface InHouseEmployeeInput {
   pfNo?: string;
   esicNo?: string;
   uan?: string;
+  inactiveFrom?: string;
+  rejoinedOn?: string;
 }
 
 export async function listInHouseEmployees(q?: string): Promise<InHouseEmployee[]> {

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { listInHouseEmployees } from "@/services/inHouseEmployees";
 import { getPayrollRun, getPayrollLines } from "@/services/payrollRuns";
 import { calculateInHouseWageLine, sumInHouseWageLines } from "@/lib/calc";
+import { onRoster } from "@/lib/roster";
 import { downloadInHousePayroll } from "@/lib/exportExcel";
 import { monthLabel } from "@/lib/date";
 import { formatCurrency } from "@/lib/format";
@@ -43,9 +44,16 @@ export function InHousePayrollGrid({ month, year }: { month: number; year: numbe
     if (!employeesQuery.data) return;
     if (runQuery.data && !linesQuery.data) return;
 
-    const active = employeesQuery.data.filter((e) => e.status === "ACTIVE");
+    // Month roster: follows the employee's join/leave/rejoin dates, same rule as contract payroll.
+    // ponytail: INACTIVE with no inactiveFrom has no dates to go by — they stay out unless already saved in this run.
+    const ym = `${year}-${String(month).padStart(2, "0")}`;
+    const roster = employeesQuery.data.filter((e) => {
+      if (e.joiningDate && e.joiningDate.slice(0, 7) > ym) return false;
+      if (e.inactiveFrom) return onRoster({ doj: e.joiningDate, inactiveFrom: e.inactiveFrom, rejoinedOn: e.rejoinedOn }, ym);
+      return e.status === "ACTIVE" || !!linesQuery.data?.some((l) => l.inHouseEmployeeId === e.id);
+    });
     setRows(
-      active.map((e) => {
+      roster.map((e) => {
         const line = linesQuery.data?.find((l) => l.inHouseEmployeeId === e.id);
         return {
           employeeId: e.id,

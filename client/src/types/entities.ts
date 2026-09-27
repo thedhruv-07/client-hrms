@@ -111,6 +111,10 @@ export interface InHouseEmployee {
   esicNo: string | null;
   uan: string | null;
   status: WorkerStatus;
+  /** When the employee went inactive; null if never rejoined. */
+  inactiveFrom: string | null;
+  /** When the employee came back after leaving; null if never rejoined. */
+  rejoinedOn: string | null;
   createdAt: string;
   updatedAt: string;
 }

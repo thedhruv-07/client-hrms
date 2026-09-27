@@ -1,9 +1,10 @@
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { inHouseEmployeeSchema, type InHouseEmployeeFormValues } from "@/lib/validation/inHouseEmployee";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import type { InHouseEmployee } from "@/types";
 
 interface InHouseEmployeeFormProps {
@@ -19,6 +20,8 @@ export function InHouseEmployeeForm({ defaultValues, existingCodes, currentCode,
   const {
     register,
     handleSubmit,
+    control,
+    watch,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<InHouseEmployeeFormValues>({
@@ -91,6 +94,41 @@ export function InHouseEmployeeForm({ defaultValues, existingCodes, currentCode,
         </div>
       </div>
 
+      {currentCode ? (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="status">Status</Label>
+            <Controller
+              name="status"
+              control={control}
+              render={({ field }) => (
+                <Select value={field.value ?? "ACTIVE"} onValueChange={field.onChange}>
+                  <SelectTrigger id="status">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ACTIVE">Active</SelectItem>
+                    <SelectItem value="INACTIVE">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+          {watch("status") === "INACTIVE" ? (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="inactiveFrom">Inactive from</Label>
+              <Input id="inactiveFrom" type="date" {...register("inactiveFrom")} />
+            </div>
+          ) : null}
+          {watch("status") === "ACTIVE" && watch("inactiveFrom") ? (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="rejoinedOn">Rejoin date</Label>
+              <Input id="rejoinedOn" type="date" {...register("rejoinedOn")} />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="bankAccount">Bank Account</Label>
@@ -158,5 +196,8 @@ export function inHouseEmployeeToDefaults(employee: InHouseEmployee): InHouseEmp
     pfNo: employee.pfNo ?? "",
     esicNo: employee.esicNo ?? "",
     uan: employee.uan ?? "",
+    status: employee.status,
+    inactiveFrom: employee.inactiveFrom ? employee.inactiveFrom.slice(0, 10) : "",
+    rejoinedOn: employee.rejoinedOn ? employee.rejoinedOn.slice(0, 10) : "",
   };
 }
