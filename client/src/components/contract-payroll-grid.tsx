@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listContractWorkers } from "@/services/contractWorkers";
-import { getPayrollRun, getPayrollLines, saveContractPayrollRun } from "@/services/payrollRuns";
+import { getPayrollRun, getPayrollLines, listPayrollRuns, saveContractPayrollRun } from "@/services/payrollRuns";
 import { getCompany } from "@/services/company";
 import { listClients } from "@/services/clients";
 import { listBills } from "@/services/bills";
@@ -121,6 +121,18 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
     enabled: !!runQuery.data,
   });
 
+  // Previous month's incentive rate, per worker — carried forward into a fresh row so it doesn't need re-typing every month.
+  const prevRunsQuery = useQuery({ queryKey: ["payroll-runs", "CONTRACT", clientId], queryFn: () => listPayrollRuns("CONTRACT", clientId), enabled: !!clientId });
+  const prevRun = useMemo(() => {
+    const earlier = (prevRunsQuery.data ?? []).filter((r) => r.year < year || (r.year === year && r.month < month));
+    return earlier.reduce<(typeof earlier)[number] | null>((latest, r) => (!latest || r.year > latest.year || (r.year === latest.year && r.month > latest.month) ? r : latest), null);
+  }, [prevRunsQuery.data, month, year]);
+  const prevLinesQuery = useQuery({ queryKey: ["payroll-lines", prevRun?.id], queryFn: () => getPayrollLines(prevRun!.id), enabled: !!prevRun });
+  const prevIncentiveByWorker = useMemo(
+    () => new Map((prevLinesQuery.data ?? []).map((l) => [l.contractWorkerId, Number(l.incentiveAllowRate)])),
+    [prevLinesQuery.data]
+  );
+
   const isFinalized = runQuery.data?.status === "FINALIZED";
 
   const [rows, setRows] = useState<Row[] | null>(null);
@@ -135,11 +147,19 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
     setPage(0);
   }, [clientId, month, year]);
 
-  const isLoading = !clientId || workersQuery.isLoading || runQuery.isLoading || (!!runQuery.data && linesQuery.isLoading);
+  const isLoading =
+    !clientId ||
+    workersQuery.isLoading ||
+    runQuery.isLoading ||
+    (!!runQuery.data && linesQuery.isLoading) ||
+    prevRunsQuery.isLoading ||
+    (!!prevRun && prevLinesQuery.isLoading);
 
   useEffect(() => {
     if (!workersQuery.data) return;
     if (runQuery.data && !linesQuery.data) return; // wait for lines if a run exists
+    if (!prevRunsQuery.data) return; // wait to know whether a previous run exists
+    if (prevRun && !prevLinesQuery.data) return; // wait for its lines before carrying incentive rates forward
 
     // Month roster: follows the worker's join/leave/rejoin dates, so a month they were away never lists them (even if an old save left a line).
     // ponytail: INACTIVE with no inactiveFrom has no dates to go by — they stay out unless already saved in this run. Set the date in Workers.
@@ -174,7 +194,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
           weekOffHoliday: line ? Number(line.weekOffHoliday) : 0,
           otHours: line ? Number(line.otHours) : 0,
           advance: line ? Number(line.advance) : 0,
-          incentiveAllowRate: line ? Number(line.incentiveAllowRate) : 0,
+          incentiveAllowRate: line ? Number(line.incentiveAllowRate) : (prevIncentiveByWorker.get(w.id) ?? 0),
           attendAward: line ? Number(line.attendAward) : 0,
           nightCount: line ? Number(line.nightCount) : 0,
           nightAllowance: line ? Number(line.nightAllowance) : 0,
@@ -188,7 +208,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
       })
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workersQuery.data, linesQuery.data, runQuery.data, month, year, clientId]);
+  }, [workersQuery.data, linesQuery.data, runQuery.data, prevRunsQuery.data, prevRun, prevLinesQuery.data, prevIncentiveByWorker, month, year, clientId]);
 
   function updateRow(workerId: string, patch: Partial<Row>) {
     setRows((prev) => prev?.map((r) => (r.workerId === workerId ? { ...r, ...patch } : r)) ?? prev);

@@ -1,8 +1,12 @@
 import type { PayrollLine, PayrollRun, PayrollType } from "@/types";
 import { api } from "./api";
 
-export async function listPayrollRuns(type?: PayrollType): Promise<PayrollRun[]> {
-  return api.get<PayrollRun[]>(`/payroll-runs${type ? `?type=${type}` : ""}`);
+export async function listPayrollRuns(type?: PayrollType, clientId?: string): Promise<PayrollRun[]> {
+  const params = new URLSearchParams();
+  if (type) params.set("type", type);
+  if (clientId) params.set("clientId", clientId);
+  const qs = params.toString();
+  return api.get<PayrollRun[]>(`/payroll-runs${qs ? `?${qs}` : ""}`);
 }
 
 export async function getPayrollRun(month: number, year: number, type: PayrollType, clientId?: string): Promise<PayrollRun | null> {
