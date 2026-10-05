@@ -202,7 +202,7 @@ billsRouter.post("/generate", requireRole("ADMIN", "HR", "ACCOUNTANT"), async (r
   const incentiveAmt = run.lines.reduce((sum, l) => sum + Number(l.incentive), 0);
   // The bill's LWF reimbursement is 2x the wage register's own total employee Welfare deductions.
   const lwf = run.lines.reduce((sum, l) => sum + Number(l.lwf), 0) * 2;
-  const result = calculateBill({ workerBasicEarnings, workerHraEarnings, otAmount, attendAward, incentiveAmt, lwf });
+  const result = calculateBill({ month, year, workerBasicEarnings, workerHraEarnings, otAmount, attendAward, incentiveAmt, lwf });
 
   const existing = await prisma.bill.findFirst({ where: { payrollRunId: run.id, clientId } });
 

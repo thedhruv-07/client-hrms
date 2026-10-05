@@ -244,7 +244,7 @@ const SALARY_COLS = [
   "AU",
 ] as const;
 
-function writeWageRegisterSheet(sheet: ExcelJS.Worksheet, data: { companyName: string; monthLabel: string; rows: WageRegisterSheetRow[]; totals: WageRegisterSheetTotals }): number {
+function writeWageRegisterSheet(sheet: ExcelJS.Worksheet, data: { companyName: string; monthLabel: string; pfWageCeiling: number; rows: WageRegisterSheetRow[]; totals: WageRegisterSheetTotals }): number {
   sheet.columns = SALARY_COLS.map((_, i) => ({ width: i < 3 ? 16 : 11 }));
   const LAST_COL = SALARY_COLS.length;
 
@@ -354,7 +354,7 @@ function writeWageRegisterSheet(sheet: ExcelJS.Worksheet, data: { companyName: s
       { formula: `ROUND((AA${rn}/L${rn})*P${rn},0)`, result: r.miscEarn },
       { formula: `R${rn}+T${rn}+V${rn}+X${rn}+Z${rn}+AB${rn}`, result: r.grossEarning },
       { formula: `AC${rn}`, result: r.grossEarning },
-      { formula: `MIN(R${rn},25000)`, result: Math.min(r.basicEarn, 25000) },
+      { formula: `MIN(R${rn},${data.pfWageCeiling})`, result: Math.min(r.basicEarn, data.pfWageCeiling) },
       { formula: `ROUNDUP(AD${rn}*3.25%,0)`, result: r.employerEsic },
       { formula: `ROUNDUP(AD${rn}*0.75%,0)`, result: r.esic },
       { formula: `ROUND(AE${rn}*12%,0)`, result: r.pf },
@@ -1007,6 +1007,8 @@ export async function downloadBill(data: BillExportData): Promise<void> {
 export interface WageRegisterWithBillData {
   companyName: string;
   monthLabel: string;
+  /** PF wage ceiling in effect for this period — see lib/calc/wage.ts's pfWageCeiling. */
+  pfWageCeiling: number;
   /** Actual calendar days in the period (30/31/28/29) — the OT sheet's per-hour rate divisor. */
   monthDays: number;
   rows: WageRegisterSheetRow[];
@@ -1022,7 +1024,7 @@ export async function downloadWageRegisterWithBill(data: WageRegisterWithBillDat
   wb.calcProperties.fullCalcOnLoad = true;
   const wageSheetName = "Salary Sheet";
   const otSheetName = "OT Calculation";
-  const wageTotalsRow = writeWageRegisterSheet(wb.addWorksheet(wageSheetName), { companyName: data.companyName, monthLabel: data.monthLabel, rows: data.rows, totals: data.totals });
+  const wageTotalsRow = writeWageRegisterSheet(wb.addWorksheet(wageSheetName), { companyName: data.companyName, monthLabel: data.monthLabel, pfWageCeiling: data.pfWageCeiling, rows: data.rows, totals: data.totals });
   const otTotalsRow = writeOtCalculationSheet(wb.addWorksheet(otSheetName), { companyName: data.companyName, monthLabel: data.monthLabel, monthDays: data.monthDays, rows: data.otRows, totals: data.otTotals });
   writeBillSheet(wb.addWorksheet("Bill"), data.bill, { sheetName: wageSheetName, totalsRow: wageTotalsRow }, { sheetName: otSheetName, totalsRow: otTotalsRow });
   await downloadWorkbook(wb, `wage-register-bill-${data.bill.billNo}-${data.monthLabel.toLowerCase()}.xlsx`);

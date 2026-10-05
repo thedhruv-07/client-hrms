@@ -183,6 +183,8 @@ payrollRunsRouter.put("/contract", requireRole("ADMIN", "HR"), async (req, res) 
   const lineData = lines.map((l) => {
     const worker = workerMap.get(l.contractWorkerId)!;
     const result = calculateWageLine({
+      month,
+      year,
       basicSalary: Number(worker.basicSalary),
       hra: Number(worker.hra),
       ta: Number(worker.ta),

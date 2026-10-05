@@ -5,7 +5,7 @@ import { getPayrollRun, getPayrollLines, listPayrollRuns, saveContractPayrollRun
 import { getCompany } from "@/services/company";
 import { listClients } from "@/services/clients";
 import { listBills } from "@/services/bills";
-import { calculateWageLine, sumWageLines, calculateBill, type WageResult } from "@/lib/calc";
+import { calculateWageLine, sumWageLines, calculateBill, pfWageCeiling, type WageResult } from "@/lib/calc";
 import { downloadWageRegisterWithBill, downloadBill, downloadNeftSheet, downloadBankSheet, type BillExportData } from "@/lib/exportExcel";
 import { daysInMonth, monthLabel, monthLabelShort } from "@/lib/date";
 import { formatCurrency, formatNumber } from "@/lib/format";
@@ -214,8 +214,14 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
     setRows((prev) => prev?.map((r) => (r.workerId === workerId ? { ...r, ...patch } : r)) ?? prev);
   }
 
-  const computed = useMemo(() => (rows ?? []).map((r) => ({ row: r, result: calculateWageLine({ ...r, monthDays: maxDays }) })), [rows, maxDays]);
-  const totals = useMemo(() => sumWageLines((rows ?? []).map((r) => ({ ...r, monthDays: maxDays }))), [rows, maxDays]);
+  const computed = useMemo(
+    () => (rows ?? []).map((r) => ({ row: r, result: calculateWageLine({ ...r, month, year, monthDays: maxDays }) })),
+    [rows, month, year, maxDays]
+  );
+  const totals = useMemo(
+    () => sumWageLines((rows ?? []).map((r) => ({ ...r, month, year, monthDays: maxDays }))),
+    [rows, month, year, maxDays]
+  );
 
   // Pagination is a display-only slice — totals/save/generate always operate on the full `computed` set.
   const pageCount = Math.max(1, Math.ceil(computed.length / PAGE_SIZE));
@@ -258,6 +264,8 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
     const existingBill = bills.find((b) => b.month === month && b.year === year);
 
     const bill = calculateBill({
+      month,
+      year,
       workerBasicEarnings: computed.map(({ result }) => result.basicEarn),
       workerHraEarnings: computed.map(({ result }) => result.hraEarn),
       otAmount: totals.otAmount,
@@ -311,6 +319,7 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
       await downloadWageRegisterWithBill({
         companyName: company.name,
         monthLabel: monthLabel(month, year),
+        pfWageCeiling: pfWageCeiling(month, year),
         monthDays: maxDays,
         rows: computed.map(({ row, result }) => {
           const regularDeduction = round2(result.pf + result.esic + result.lwf + result.advance + result.tds + result.otherDeduction);

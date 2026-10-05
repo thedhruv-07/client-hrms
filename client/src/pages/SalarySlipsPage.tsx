@@ -65,6 +65,8 @@ function buildContractSlipData(
     : (() => {
         // No payroll run yet for this month — assume full attendance off the worker's raw rates, same fallback in-house uses.
         const w = calculateWageLine({
+          month,
+          year,
           basicSalary: Number(worker.basicSalary),
           hra: Number(worker.hra),
           ta: Number(worker.ta),

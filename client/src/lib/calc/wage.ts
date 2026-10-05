@@ -25,12 +25,18 @@
 
 // ponytail: EPFO's statutory monthly wage ceiling for mandatory employee PF
 // contribution, and the Haryana LWF slab threshold — update here if either
-// changes.
-const PF_WAGE_CEILING = 25000;
+// changes. The EPF ceiling rose from 15000 to 25000 effective Sept 2026;
+// periods before that still use the old ceiling so past months stay correct.
+export function pfWageCeiling(month: number, year: number): number {
+  return year > 2026 || (year === 2026 && month >= 9) ? 25000 : 15000;
+}
 const LWF_GROSS_THRESHOLD = 17500;
 const LWF_FLAT_ABOVE_THRESHOLD = 35;
 
 export interface WageInput {
+  /** Period the line belongs to — picks the PF wage ceiling in effect for that month. */
+  month: number;
+  year: number;
   basicSalary: number;
   /** Monthly HRA rate, prorated same as basicSalary. Defaults to 0. */
   hra?: number;
@@ -162,7 +168,7 @@ function computeRaw(input: WageInput) {
   const otTotalGrossPayable = otGrossPayable + otArrear;
   const grossEarning = grossWagesErnd + otTotalGrossPayable;
 
-  const pfWages = Math.min(basicEarn, PF_WAGE_CEILING);
+  const pfWages = Math.min(basicEarn, pfWageCeiling(input.month, input.year));
   const pf = (pfWages * 12) / 100;
   const esic = (grossWagesErnd * 0.75) / 100;
   const employerEsic = (grossWagesErnd * 3.25) / 100;

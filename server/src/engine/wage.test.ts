@@ -7,7 +7,7 @@ import { calculateWageLine, sumWageLines } from "./wage";
 // 12 present days + 3 week-off/holiday = 15 paid days).
 
 test("YOGESH (basic 15221, 12 present + 3 week-off, 13 OT hrs, no HRA/incentive/award)", () => {
-  const r = calculateWageLine({ basicSalary: 15221, monthDays: 30, actualPresentDays: 12, weekOffHoliday: 3, otHours: 13 });
+  const r = calculateWageLine({ month: 9, year: 2026, basicSalary: 15221, monthDays: 30, actualPresentDays: 12, weekOffHoliday: 3, otHours: 13 });
   assert.equal(r.workingDays, 15);
   assert.equal(r.basicEarn, 7611); // 7610.5 rounded to the nearest whole rupee
   assert.equal(r.hraEarn, 0);
@@ -23,13 +23,13 @@ test("YOGESH (basic 15221, 12 present + 3 week-off, 13 OT hrs, no HRA/incentive/
 });
 
 test("PRAKASH (basic 19426, 11 paid days, 46 OT hrs, incentive allow rate 1000)", () => {
-  const r = calculateWageLine({ basicSalary: 19426, monthDays: 30, actualPresentDays: 11, weekOffHoliday: 0, otHours: 46, incentiveAllowRate: 1000 });
+  const r = calculateWageLine({ month: 9, year: 2026, basicSalary: 19426, monthDays: 30, actualPresentDays: 11, weekOffHoliday: 0, otHours: 46, incentiveAllowRate: 1000 });
   assert.equal(r.otAmount, 7447); // 19426/30/8*46*2 = 7446.63 -> nearest rupee
   assert.equal(r.incentive, 367); // 1000/30*11 = 366.67 -> nearest rupee
 });
 
 test("TA/Medical/CEA earn prorated the same way as basic; Misc rounds to the rupee at the per-worker cell", () => {
-  const r = calculateWageLine({
+  const r = calculateWageLine({ month: 9, year: 2026,
     basicSalary: 15000,
     ta: 1000,
     medicalAllow: 500,
@@ -48,19 +48,26 @@ test("TA/Medical/CEA earn prorated the same way as basic; Misc rounds to the rup
 });
 
 test("Welfare uses a flat 35 once gross wages earned reach 17500, not the 0.2% rate", () => {
-  const r = calculateWageLine({ basicSalary: 30000, monthDays: 30, actualPresentDays: 30, weekOffHoliday: 0, otHours: 0 });
+  const r = calculateWageLine({ month: 9, year: 2026, basicSalary: 30000, monthDays: 30, actualPresentDays: 30, weekOffHoliday: 0, otHours: 0 });
   assert.equal(r.grossWagesErnd, 30000);
   assert.equal(r.lwf, 35);
 });
 
 test("PF caps at the 25000 wage ceiling even when basic earned exceeds it", () => {
-  const r = calculateWageLine({ basicSalary: 34000, monthDays: 30, actualPresentDays: 30, weekOffHoliday: 0, otHours: 0 });
+  const r = calculateWageLine({ month: 9, year: 2026, basicSalary: 34000, monthDays: 30, actualPresentDays: 30, weekOffHoliday: 0, otHours: 0 });
   assert.equal(r.basicEarn, 34000);
   assert.equal(r.pf, 3000); // 12% of the capped 25000, not of 34000
 });
 
+test("PF ceiling is 15000 before Sept 2026, 25000 from Sept 2026 on, for the same earnings", () => {
+  const input = { basicSalary: 34000, monthDays: 30, actualPresentDays: 30, weekOffHoliday: 0, otHours: 0 };
+  assert.equal(calculateWageLine({ month: 8, year: 2026, ...input }).pf, 1800); // 12% of 15000
+  assert.equal(calculateWageLine({ month: 9, year: 2026, ...input }).pf, 3000); // 12% of 25000
+  assert.equal(calculateWageLine({ month: 1, year: 2027, ...input }).pf, 3000); // still 25000 after the cutover month
+});
+
 test("Night Allowance and Overtime Arrear feed the OT stream's gross/net, not the regular stream", () => {
-  const r = calculateWageLine({
+  const r = calculateWageLine({ month: 9, year: 2026,
     basicSalary: 15000,
     monthDays: 30,
     actualPresentDays: 15,
@@ -75,8 +82,8 @@ test("Night Allowance and Overtime Arrear feed the OT stream's gross/net, not th
 });
 
 test("TDS and Other Deduction reduce net payable; Leave Encashment/Arrears/Bonus increase it", () => {
-  const base = calculateWageLine({ basicSalary: 15000, monthDays: 30, actualPresentDays: 15, weekOffHoliday: 0, otHours: 0 });
-  const withExtras = calculateWageLine({
+  const base = calculateWageLine({ month: 9, year: 2026, basicSalary: 15000, monthDays: 30, actualPresentDays: 15, weekOffHoliday: 0, otHours: 0 });
+  const withExtras = calculateWageLine({ month: 9, year: 2026,
     basicSalary: 15000,
     monthDays: 30,
     actualPresentDays: 15,
@@ -93,7 +100,7 @@ test("TDS and Other Deduction reduce net payable; Leave Encashment/Arrears/Bonus
 });
 
 test("zero attendance and zero OT hours nets to zero minus any advance", () => {
-  const r = calculateWageLine({ basicSalary: 17000, monthDays: 30, actualPresentDays: 0, weekOffHoliday: 0, otHours: 0, advance: 500 });
+  const r = calculateWageLine({ month: 9, year: 2026, basicSalary: 17000, monthDays: 30, actualPresentDays: 0, weekOffHoliday: 0, otHours: 0, advance: 500 });
   assert.equal(r.basicEarn, 0);
   assert.equal(r.otAmount, 0);
   assert.equal(r.grossEarning, 0);
@@ -104,8 +111,8 @@ test("zero attendance and zero OT hours nets to zero minus any advance", () => {
 });
 
 test("a 31-day month pays a lower per-day rate than a 30-day month for the same working days", () => {
-  const thirtyDayMonth = calculateWageLine({ basicSalary: 17000, monthDays: 30, actualPresentDays: 23, weekOffHoliday: 0, otHours: 0 });
-  const thirtyOneDayMonth = calculateWageLine({ basicSalary: 17000, monthDays: 31, actualPresentDays: 23, weekOffHoliday: 0, otHours: 0 });
+  const thirtyDayMonth = calculateWageLine({ month: 9, year: 2026, basicSalary: 17000, monthDays: 30, actualPresentDays: 23, weekOffHoliday: 0, otHours: 0 });
+  const thirtyOneDayMonth = calculateWageLine({ month: 9, year: 2026, basicSalary: 17000, monthDays: 31, actualPresentDays: 23, weekOffHoliday: 0, otHours: 0 });
   assert.ok(thirtyOneDayMonth.basicEarn < thirtyDayMonth.basicEarn);
 });
 

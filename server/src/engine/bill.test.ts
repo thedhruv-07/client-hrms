@@ -12,7 +12,7 @@ function round0(n: number): number {
 test("bill reproduces the real BILL CALCULATION sheet's Sub Total through Grand Total", () => {
   // Split across several workers, each under the 15000 PF ceiling, matching
   // the real month where no individual worker's basic earn triggered the cap.
-  const bill = calculateBill({
+  const bill = calculateBill({ month: 9, year: 2026,
     workerBasicEarnings: [10000, 10000, 10000, 10000, 10000, 10000, 10823.38333333333],
     workerHraEarnings: [2140.0666666666666],
     otAmount: 74929.48749999999,
@@ -34,21 +34,27 @@ test("bill reproduces the real BILL CALCULATION sheet's Sub Total through Grand 
 });
 
 test("PF reimbursement is capped at the EPF wage ceiling per worker, not the raw basic total", () => {
-  const bill = calculateBill({ workerBasicEarnings: [27000, 27000], otAmount: 0 });
+  const bill = calculateBill({ month: 9, year: 2026, workerBasicEarnings: [27000, 27000], otAmount: 0 });
   // Each worker's basic (27000) exceeds the 25000 ceiling, so PF base is 25000*2 = 50000, not 54000.
   assert.equal(bill.pfBase, 50000);
   assert.equal(bill.pfEmployer, 6500); // 13% of 50000
 });
 
+test("bill's PF ceiling is 15000 before Sept 2026, 25000 from Sept 2026 on, for the same earnings", () => {
+  const earnings = { workerBasicEarnings: [27000, 27000], otAmount: 0 };
+  assert.equal(calculateBill({ month: 8, year: 2026, ...earnings }).pfBase, 30000); // 15000 * 2
+  assert.equal(calculateBill({ month: 9, year: 2026, ...earnings }).pfBase, 50000); // 25000 * 2
+});
+
 test("ESIC rounds up even a fractional paisa, unlike PF/Service Charge/GST", () => {
   // total1 = 100 -> 3.25% = 3.25 exactly, still rounds up to 4 per ROUNDUP semantics on any positive remainder...
   // use a value that produces a genuine fractional remainder instead:
-  const bill = calculateBill({ workerBasicEarnings: [101], otAmount: 0 });
+  const bill = calculateBill({ month: 9, year: 2026, workerBasicEarnings: [101], otAmount: 0 });
   assert.equal(bill.esiEmployer, Math.ceil(101 * 0.0325));
 });
 
 test("HRA, Attendance Award, and Incentive Amt default to 0 when not supplied", () => {
-  const bill = calculateBill({ workerBasicEarnings: [1000], otAmount: 0 });
+  const bill = calculateBill({ month: 9, year: 2026, workerBasicEarnings: [1000], otAmount: 0 });
   assert.equal(bill.hra, 0);
   assert.equal(bill.attendAward, 0);
   assert.equal(bill.incentiveAmt, 0);
@@ -56,7 +62,7 @@ test("HRA, Attendance Award, and Incentive Amt default to 0 when not supplied", 
 });
 
 test("all-zero input nets to an all-zero bill", () => {
-  const bill = calculateBill({ workerBasicEarnings: [], otAmount: 0 });
+  const bill = calculateBill({ month: 9, year: 2026, workerBasicEarnings: [], otAmount: 0 });
   assert.equal(bill.total1, 0);
   assert.equal(bill.esiEmployer, 0);
   assert.equal(bill.pfEmployer, 0);

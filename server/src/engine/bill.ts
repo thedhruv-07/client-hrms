@@ -11,10 +11,16 @@
 
 // ponytail: EPFO's statutory monthly wage ceiling for mandatory employer PF
 // contribution. Update here if the ceiling changes; per-worker opt-in above
-// the ceiling isn't modeled.
-const PF_WAGE_CEILING = 25000;
+// the ceiling isn't modeled. Rose from 15000 to 25000 effective Sept 2026 —
+// periods before that still use the old ceiling so past bills stay correct.
+function pfWageCeiling(month: number, year: number): number {
+  return year > 2026 || (year === 2026 && month >= 9) ? 25000 : 15000;
+}
 
 export interface BillInput {
+  /** Period the bill belongs to — picks the PF wage ceiling in effect for that month. */
+  month: number;
+  year: number;
   /** Each worker's Basic Earn for the month — summed for the Basic line, and separately capped per-worker at the EPF wage ceiling for the PF reimbursement base. */
   workerBasicEarnings: number[];
   /** Each worker's HRA Earn for the month, summed for the HRA line. */
@@ -59,11 +65,11 @@ function roundUp0(n: number): number {
 }
 
 export function calculateBill(input: BillInput): BillResult {
-  const { workerBasicEarnings, workerHraEarnings = [], otAmount, attendAward = 0, incentiveAmt = 0, lwf = 0 } = input;
+  const { month, year, workerBasicEarnings, workerHraEarnings = [], otAmount, attendAward = 0, incentiveAmt = 0, lwf = 0 } = input;
 
   const basicWages = round0(workerBasicEarnings.reduce((sum, b) => sum + b, 0));
   const hra = round0(workerHraEarnings.reduce((sum, h) => sum + h, 0));
-  const pfBase = round0(workerBasicEarnings.reduce((sum, b) => sum + Math.min(b, PF_WAGE_CEILING), 0));
+  const pfBase = round0(workerBasicEarnings.reduce((sum, b) => sum + Math.min(b, pfWageCeiling(month, year)), 0));
 
   const total1 = round0(basicWages + hra + otAmount + attendAward + incentiveAmt); // Sub Total
   const esiEmployer = roundUp0((total1 * 3.25) / 100);
