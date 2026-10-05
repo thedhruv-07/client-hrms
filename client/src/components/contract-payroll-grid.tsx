@@ -239,6 +239,16 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
     [computed]
   );
 
+  // Manual per-worker inputs (Advance, Incentive Rate, No. of Nights, etc.) have no engine-computed
+  // counterpart to sum — like attendanceTotals above, their footer totals are summed from the raw rows.
+  const editableTotals = useMemo(
+    () =>
+      Object.fromEntries(
+        EDITABLE_COLUMNS.filter((c) => c.key !== "otHours").map(({ key }) => [key, computed.reduce((sum, { row }) => sum + row[key], 0)])
+      ) as Record<Exclude<NumericRowKey, "otHours">, number>,
+    [computed]
+  );
+
   // sumWageLines omits the statutory-deduction totals (they're per-worker-rounded, see wage.ts) —
   // sum the already-rounded per-worker results here instead, for both the on-screen footer and export.
   const deductionTotals = useMemo(() => {
@@ -673,7 +683,11 @@ export function ContractPayrollGrid({ month, year }: { month: number; year: numb
                 <TableCell className="figure text-right">{formatNumber(attendanceTotals.presentDays)}</TableCell>
                 <TableCell className="figure text-right">{formatNumber(attendanceTotals.weekOffHoliday)}</TableCell>
                 <TableCell className="figure text-right">{formatNumber(attendanceTotals.otHours)}</TableCell>
-                <TableCell colSpan={EDITABLE_COLUMNS.length - 1} />
+                {EDITABLE_COLUMNS.filter((c): c is { key: Exclude<NumericRowKey, "otHours">; label: string } => c.key !== "otHours").map((c) => (
+                  <TableCell key={c.key} className="figure text-right">
+                    {c.key === "nightCount" ? formatNumber(editableTotals[c.key]) : formatCurrency(editableTotals[c.key])}
+                  </TableCell>
+                ))}
                 <TableCell className="figure text-right">{formatCurrency(totals.basicEarn)}</TableCell>
                 <TableCell className="figure text-right">{formatCurrency(totals.hraEarn)}</TableCell>
                 <TableCell className="figure text-right">{formatCurrency(totals.taEarn)}</TableCell>
