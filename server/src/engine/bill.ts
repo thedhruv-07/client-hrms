@@ -12,7 +12,7 @@
 // ponytail: EPFO's statutory monthly wage ceiling for mandatory employer PF
 // contribution. Update here if the ceiling changes; per-worker opt-in above
 // the ceiling isn't modeled.
-const PF_WAGE_CEILING = 15000;
+const PF_WAGE_CEILING = 25000;
 
 export interface BillInput {
   /** Each worker's Basic Earn for the month — summed for the Basic line, and separately capped per-worker at the EPF wage ceiling for the PF reimbursement base. */

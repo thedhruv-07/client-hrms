@@ -354,7 +354,7 @@ function writeWageRegisterSheet(sheet: ExcelJS.Worksheet, data: { companyName: s
       { formula: `ROUND((AA${rn}/L${rn})*P${rn},0)`, result: r.miscEarn },
       { formula: `R${rn}+T${rn}+V${rn}+X${rn}+Z${rn}+AB${rn}`, result: r.grossEarning },
       { formula: `AC${rn}`, result: r.grossEarning },
-      { formula: `MIN(R${rn},15000)`, result: Math.min(r.basicEarn, 15000) },
+      { formula: `MIN(R${rn},25000)`, result: Math.min(r.basicEarn, 25000) },
       { formula: `ROUNDUP(AD${rn}*3.25%,0)`, result: r.employerEsic },
       { formula: `ROUNDUP(AD${rn}*0.75%,0)`, result: r.esic },
       { formula: `ROUND(AE${rn}*12%,0)`, result: r.pf },

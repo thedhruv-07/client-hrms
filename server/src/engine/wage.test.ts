@@ -14,7 +14,7 @@ test("YOGESH (basic 15221, 12 present + 3 week-off, 13 OT hrs, no HRA/incentive/
   assert.equal(r.otAmount, 1649); // basic/30/8*13*2 = 1648.94 — double rate
   assert.equal(r.incentive, 0);
   assert.equal(r.grossWagesErnd, 7611);
-  assert.equal(r.pf, 913); // ROUND(min(7610.5,15000)*12%, 0)
+  assert.equal(r.pf, 913); // ROUND(min(7610.5,25000)*12%, 0)
   assert.equal(r.esic, 58); // ROUNDUP(7610.5*0.75%, 0)
   assert.equal(r.employerEsic, 248); // ROUNDUP(7610.5*3.25%, 0)
   assert.equal(r.otEsic, 13); // ROUNDUP(1648.94*0.75%, 0)
@@ -53,10 +53,10 @@ test("Welfare uses a flat 35 once gross wages earned reach 17500, not the 0.2% r
   assert.equal(r.lwf, 35);
 });
 
-test("PF caps at the 15000 wage ceiling even when basic earned exceeds it", () => {
+test("PF caps at the 25000 wage ceiling even when basic earned exceeds it", () => {
   const r = calculateWageLine({ basicSalary: 34000, monthDays: 30, actualPresentDays: 30, weekOffHoliday: 0, otHours: 0 });
   assert.equal(r.basicEarn, 34000);
-  assert.equal(r.pf, 1800); // 12% of the capped 15000, not of 34000
+  assert.equal(r.pf, 3000); // 12% of the capped 25000, not of 34000
 });
 
 test("Night Allowance and Overtime Arrear feed the OT stream's gross/net, not the regular stream", () => {

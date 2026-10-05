@@ -34,10 +34,10 @@ test("bill reproduces the real BILL CALCULATION sheet's Sub Total through Grand 
 });
 
 test("PF reimbursement is capped at the EPF wage ceiling per worker, not the raw basic total", () => {
-  const bill = calculateBill({ workerBasicEarnings: [17000, 17000], otAmount: 0 });
-  // Each worker's basic (17000) exceeds the 15000 ceiling, so PF base is 15000*2 = 30000, not 34000.
-  assert.equal(bill.pfBase, 30000);
-  assert.equal(bill.pfEmployer, 3900); // 13% of 30000
+  const bill = calculateBill({ workerBasicEarnings: [27000, 27000], otAmount: 0 });
+  // Each worker's basic (27000) exceeds the 25000 ceiling, so PF base is 25000*2 = 50000, not 54000.
+  assert.equal(bill.pfBase, 50000);
+  assert.equal(bill.pfEmployer, 6500); // 13% of 50000
 });
 
 test("ESIC rounds up even a fractional paisa, unlike PF/Service Charge/GST", () => {

@@ -26,7 +26,7 @@
 // ponytail: EPFO's statutory monthly wage ceiling for mandatory employee PF
 // contribution, and the Haryana LWF slab threshold — update here if either
 // changes.
-const PF_WAGE_CEILING = 15000;
+const PF_WAGE_CEILING = 25000;
 const LWF_GROSS_THRESHOLD = 17500;
 const LWF_FLAT_ABOVE_THRESHOLD = 35;
 
